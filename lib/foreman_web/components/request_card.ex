@@ -168,6 +168,7 @@ defmodule ForemanWeb.RequestCard do
       )
 
     ~H"""
+    <ForemanWeb.PriorityBadge.badge priority={@request.priority} />
     <.link
       id={@id}
       patch={if @link == :patch, do: @path}

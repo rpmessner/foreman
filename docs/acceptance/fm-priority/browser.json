@@ -1,0 +1,142 @@
+{
+  "preview": {
+    "app": "foreman",
+    "branch": "fm-priority",
+    "database": "foreman_preview_fm_priority_792fee20a42a",
+    "missing": false,
+    "owner": "fm-priority",
+    "port": 4880,
+    "state": "running",
+    "unit": "devserve-foreman-fm_priority-792fee20a42a.service",
+    "url": "http://127.0.0.1:4880",
+    "worktree": "."
+  },
+  "evidence": [
+    {
+      "width": 1440,
+      "theme": "light",
+      "initiativesOrder": [
+        "demo-b",
+        "demo-a",
+        "demo-c"
+      ],
+      "needsYouOrder": [
+        "demo-a",
+        "demo-b",
+        "demo-c"
+      ],
+      "preservedInputNode": true,
+      "preservedAnswer": true,
+      "errors": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "initiativesOrder": [
+        "demo-b",
+        "demo-a",
+        "demo-c"
+      ],
+      "needsYouOrder": [
+        "demo-a",
+        "demo-b",
+        "demo-c"
+      ],
+      "preservedInputNode": true,
+      "preservedAnswer": true,
+      "errors": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "initiativesOrder": [
+        "demo-b",
+        "demo-a",
+        "demo-c"
+      ],
+      "needsYouOrder": [
+        "demo-a",
+        "demo-b",
+        "demo-c"
+      ],
+      "preservedInputNode": true,
+      "preservedAnswer": true,
+      "errors": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "initiativesOrder": [
+        "demo-b",
+        "demo-a",
+        "demo-c"
+      ],
+      "needsYouOrder": [
+        "demo-a",
+        "demo-b",
+        "demo-c"
+      ],
+      "preservedInputNode": true,
+      "preservedAnswer": true,
+      "errors": []
+    }
+  ],
+  "overlay": {
+    "items": [
+      {
+        "id": "demo-a",
+        "repo": "priority-demo",
+        "stage": "queued"
+      },
+      {
+        "id": "demo-b",
+        "repo": "priority-demo",
+        "stage": "queued"
+      },
+      {
+        "id": "demo-c",
+        "repo": "priority-demo",
+        "stage": "queued"
+      },
+      {
+        "id": "demo-epic",
+        "repo": "priority-demo",
+        "stage": "ticketed"
+      }
+    ],
+    "jumps": [
+      {
+        "id": "demo-a",
+        "at": "2026-10-21T07:42:18.384106Z",
+        "repo": "priority-demo",
+        "actor": "user"
+      }
+    ],
+    "priority_overrides": [
+      {
+        "id": "demo-a",
+        "priority": 0,
+        "at": "2026-10-21T07:42:18.376986",
+        "repo": "priority-demo",
+        "actor": "user",
+        "file_priority": 4
+      }
+    ]
+  },
+  "syncCleared": true,
+  "api": [
+    {
+      "path": "/api/repos",
+      "status": 401
+    },
+    {
+      "path": "/api/tickets/priority-demo/demo-a",
+      "status": 401
+    },
+    {
+      "path": "/api/commands",
+      "method": "POST",
+      "status": 401
+    }
+  ]
+}

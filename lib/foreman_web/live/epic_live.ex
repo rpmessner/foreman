@@ -23,6 +23,9 @@ defmodule ForemanWeb.EpicLive do
   def handle_event("launch-session", params, socket),
     do: {:noreply, socket |> ForemanWeb.PlanningSession.launch(params) |> refresh()}
 
+  def handle_event("priority", params, socket),
+    do: {:noreply, socket |> ForemanWeb.TicketDetail.priority(params) |> refresh()}
+
   def handle_event("preview", params, socket),
     do: {:noreply, ForemanWeb.TicketDetail.preview(socket, params)}
 
@@ -187,6 +190,7 @@ defmodule ForemanWeb.EpicLive do
                       <div class="flex flex-wrap gap-1">
                         <Badge.badge color={stage_color(ticket.stage)}>{ticket.stage}</Badge.badge>
                         <Badge.badge>{ticket.status}</Badge.badge>
+                        <ForemanWeb.PriorityBadge.badge priority={ticket.priority} />
                       </div>
                     </.link>
                   </div>

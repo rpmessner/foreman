@@ -135,7 +135,13 @@ defmodule Foreman.TicketCLI do
                   &(get_in(tickets, [&1, :facts, "status"]) == "closed")
                 )))
       end)
-      |> Enum.sort_by(& &1.facts["id"])
+      |> Enum.sort_by(fn ticket ->
+        facts = ticket.facts
+
+        if verb == "ready",
+          do: {Foreman.Priority.rank(facts["priority"]), facts["created"] || "", facts["id"]},
+          else: facts["id"]
+      end)
       |> Enum.map(&output/1)
 
     {:ok, rows}

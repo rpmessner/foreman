@@ -31,6 +31,7 @@ defmodule Foreman.Beads.Projection do
           :unchanged
         else
           replace_rows(repo_key, export)
+          Foreman.Priority.reconcile(repo_key)
           :ok = Foreman.Events.broadcast(:projection_changed, repo_key)
           :changed
         end

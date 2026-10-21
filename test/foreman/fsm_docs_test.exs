@@ -21,11 +21,12 @@ defmodule Foreman.FsmDocsTest do
              "| pr_open | cr_merged | -> merged | record(merge), emit(stage), suggest(close_bead) |"
 
     assert text =~ "| abandoned | cr_merged | ignored |  |"
-    assert length(String.split(String.trim(text), "\n")) == 135
+    assert length(String.split(String.trim(text), "\n")) == 145
   end
 
   for {name, module} <- [
         {"stage", Foreman.Stage},
+        {"priority_override", Foreman.PriorityOverride},
         {"deploy_lifecycle", Foreman.DeployLifecycle},
         {"request", Foreman.Request},
         {"request_wait", Foreman.RequestWait},
