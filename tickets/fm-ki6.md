@@ -2,7 +2,7 @@
 id: fm-ki6
 title: "One deploy command for the live board"
 type: task
-status: open
+status: in_progress
 priority: 2
 parent: null
 blocked_by: []

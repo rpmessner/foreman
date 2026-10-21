@@ -2,7 +2,7 @@
 id: fm-t46
 title: "Launched sessions start with a clean environment, not the release's"
 type: bug
-status: open
+status: in_progress
 priority: 1
 parent: null
 blocked_by: []
@@ -24,3 +24,6 @@ Launch builds the child environment explicitly: drop the release's PATH entries,
 - [ ] A unit test on the environment builder: given a release-shaped environment, the child environment has no release PATH entries, no RELEASE_*/erts variables and no FOREMAN_DATABASE_URL, and keeps the intended FOREMAN_* facts
 - [ ] Live: after deploy, Launch a coordinator; in its shell `command -v foreman` is ~/.local/bin/foreman and `env | grep -c FOREMAN_DATABASE_URL` is 0
 - [ ] A pi build started from that coordinator shows the same
+
+## Notes
+- 2026-10-21 user: Coordinator findings 2026-10-21: session_tmux already strips RELEASE_*, PHX_*, FOREMAN_DATABASE_URL and SECRET_KEY_BASE in the launch command, but not the release's PATH entries; the Oct 18 coordinator may predate that. Separately, the foreman-tmux server process itself carries FOREMAN_DATABASE_URL in its environment (systemd unit has no Environment line; source unknown), so every window created in that server, including pi builds via pi-window, inherits it; `tmux set-environment -g -r` did not remove it from new windows. Only cli_transport reads it (CLI fallback); config/ does not. Find the server env source and fix both paths.

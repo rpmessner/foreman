@@ -2,7 +2,7 @@
 id: fm-c2w.31
 title: "Port: ticket age on Initiatives; Unplanned holds only untouched tickets"
 type: feature
-status: open
+status: in_progress
 priority: 3
 parent: fm-c2w
 blocked_by: []
