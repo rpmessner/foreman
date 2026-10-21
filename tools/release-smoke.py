@@ -6,6 +6,7 @@ non-default ports and scratch files under this checkout's ignored tmp directory.
 No systemd installation or user configuration is touched.
 """
 
+import argparse
 import os
 from pathlib import Path
 import secrets
@@ -19,7 +20,11 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = ROOT / "_build/prod/rel/foreman"
-BIN = RELEASE / "bin/foreman"
+def release_path(args=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--release", type=Path, default=RELEASE,
+                        help="release directory to exercise (default: build output)")
+    return parser.parse_args(args).release.expanduser().resolve()
 
 
 def free_port():
@@ -40,7 +45,8 @@ def wait_for(check, processes, description):
 
 
 def main():
-    assert BIN.is_file(), "build with MIX_ENV=prod mix release first"
+    bin_path = release_path() / "bin/foreman"
+    assert bin_path.is_file(), "build with MIX_ENV=prod mix release first"
     (ROOT / "tmp").mkdir(exist_ok=True)
     scratch = Path(tempfile.mkdtemp(prefix="release-smoke-", dir=ROOT / "tmp"))
     print(f"Artifacts: {scratch.relative_to(ROOT)}", flush=True)
@@ -94,7 +100,7 @@ def main():
     logs = []
     try:
         with (scratch / "database.log").open("w") as log:
-            subprocess.run([str(BIN), "eval", database_setup], env=env, cwd=scratch,
+            subprocess.run([str(bin_path), "eval", database_setup], env=env, cwd=scratch,
                            stdout=log, stderr=subprocess.STDOUT, check=True, timeout=60)
         ports = {"web": free_port(), "worker": free_port()}
         while ports["worker"] == ports["web"]:
@@ -111,7 +117,7 @@ def main():
             log_path = scratch / f"{role}.log"
             log = log_path.open("w")
             logs.append(log)
-            process = subprocess.Popen([str(BIN), "start"], env=role_env, cwd=scratch,
+            process = subprocess.Popen([str(bin_path), "start"], env=role_env, cwd=scratch,
                                        stdout=log, stderr=subprocess.STDOUT,
                                        start_new_session=True)
             processes.append(process)
@@ -150,7 +156,7 @@ def main():
         for log in logs:
             log.close()
         if "SMOKE_DATABASE_CREATED" in (scratch / "database.log").read_text():
-            subprocess.run([str(BIN), "eval", database_cleanup], env=env, cwd=scratch,
+            subprocess.run([str(bin_path), "eval", database_cleanup], env=env, cwd=scratch,
                            check=True, timeout=60)
 
 
