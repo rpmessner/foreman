@@ -21,3 +21,6 @@ The ticket sheet's Overview still has a 'BEADS FIELDS' heading (tickets are file
 - [ ] Heading names the ticket file fields
 - [ ] Times on the sheet use the shared formatter with full time on hover
 - [ ] LiveView test; screenshot light/dark
+
+## Notes
+- 2026-10-21 user: Follow-up seen at close-out: the Initiatives advanced filters still label the status select 'Beads status'.
