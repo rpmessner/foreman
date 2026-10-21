@@ -26,6 +26,12 @@ defmodule Foreman.Requests.Request do
     field :state, :string
     field :outcome, :map, default: %{}
     field :note, :string
+    field :priority, :integer, virtual: true
+    field :file, :integer, virtual: true
+    field :changed_on_board, :boolean, virtual: true, default: false
+    field :jump_order, :integer, virtual: true
+    field :priority_order, :integer, virtual: true
+    field :key, :any, virtual: true
     timestamps(type: :utc_datetime_usec)
   end
 end

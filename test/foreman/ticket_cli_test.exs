@@ -35,6 +35,16 @@ defmodule Foreman.TicketCLITest do
     Jason.decode!(output)
   end
 
+  test "ready lists priority before creation order without changing ls order", %{root: root} do
+    first = call(root, ["new", "First"])
+    second = call(root, ["new", "Second"])
+    [low, high] = Enum.sort([first["id"], second["id"]])
+    call(root, ["update", low, "--priority", "4"])
+    call(root, ["update", high, "--priority", "0"])
+    assert Enum.map(call(root, ["ready"]), & &1["id"]) == [high, low]
+    assert Enum.map(call(root, ["ls"]), & &1["id"]) == [low, high]
+  end
+
   test "an empty configured checkout lists tickets without a server", %{root: root} do
     assert call(root, ["ls"]) == []
     assert call(root, ["ready"]) == []

@@ -248,11 +248,14 @@ defmodule Foreman.Requests do
       Repo.all(
         from r in Request, where: r.state == "not_picked_up", order_by: [r.updated_at, r.id]
       )
+      |> prioritize()
 
   def pending_count, do: Repo.aggregate(from(r in Request, where: r.state == "pending"), :count)
 
   def pending,
-    do: Repo.all(from r in Request, where: r.state == "pending", order_by: [r.inserted_at, r.id])
+    do:
+      Repo.all(from r in Request, where: r.state == "pending", order_by: [r.inserted_at, r.id])
+      |> prioritize()
 
   def recent,
     do:
@@ -262,6 +265,7 @@ defmodule Foreman.Requests do
           order_by: [desc: r.updated_at, desc: r.id],
           limit: 50
       )
+      |> prioritize()
 
   def for_ticket({repo, id}) do
     row = Overlay.get({repo, id})
@@ -277,6 +281,15 @@ defmodule Foreman.Requests do
         where: r.repo_key == ^repo and r.bead_id in ^ids,
         order_by: [desc: r.inserted_at, desc: r.id]
     )
+    |> prioritize()
+  end
+
+  defp prioritize(requests) do
+    requests
+    |> Enum.map(&%{&1 | key: {&1.repo_key, &1.bead_id}})
+    |> Foreman.Priority.sort()
+    |> Enum.with_index()
+    |> Enum.map(fn {request, index} -> %{request | priority_order: index} end)
   end
 
   @doc "Internal interpreter. HTTP agents cannot submit worker or observed events."

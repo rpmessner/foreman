@@ -87,6 +87,9 @@ defmodule ForemanWeb.InitiativesLive do
   def handle_event("launch-session", params, socket),
     do: {:noreply, socket |> ForemanWeb.PlanningSession.launch(params) |> refresh()}
 
+  def handle_event("priority", params, socket),
+    do: {:noreply, socket |> ForemanWeb.TicketDetail.priority(params) |> refresh()}
+
   def handle_event("preview", params, socket),
     do: {:noreply, ForemanWeb.TicketDetail.preview(socket, params)}
 
@@ -696,6 +699,7 @@ defmodule ForemanWeb.InitiativesLive do
                     {row.title}
                   </.link>
                   <span class="font-mono text-xs text-foreground-softer">{row.bead_id}</span>
+                  <ForemanWeb.PriorityBadge.badge priority={row.priority} />
                   <Badge.badge :if={row.stale} color="warning" class="ml-2">stale</Badge.badge>
                 </div>
               </div>
@@ -780,7 +784,10 @@ defmodule ForemanWeb.InitiativesLive do
         {@row.bead_id}
       </span>
       <span class="bb-ticket-title min-w-0 flex-1 text-sm">{@row.title}</span>
-      <Badge.badge class="bb-ticket-stage" color={stage_color(@row.stage)}>{@row.stage}</Badge.badge>
+      <span class="bb-ticket-stage flex items-center gap-2">
+        <ForemanWeb.PriorityBadge.badge priority={@row.priority} />
+        <Badge.badge color={stage_color(@row.stage)}>{@row.stage}</Badge.badge>
+      </span>
       <span class="text-xs text-foreground-softer">
         {@row.type} · {@row.status}
         <span :if={@row.created_at} class="whitespace-nowrap">

@@ -29,7 +29,7 @@ defmodule Foreman.Initiatives.Tree do
           members
           |> Enum.map(&nodes[&1])
           |> Enum.reject(&(is_nil(&1) or &1.type == "epic"))
-          |> Enum.sort_by(&Foreman.Beads.Id.sort_key(&1.key))
+          |> Enum.sort_by(&{Foreman.Priority.order_key(&1), Foreman.Beads.Id.sort_key(&1.key)})
 
         {epic.key,
          Map.merge(epic, %{
@@ -125,7 +125,8 @@ defmodule Foreman.Initiatives.Tree do
   defp nest(epics, memberships, parents, visited) do
     epics
     |> Enum.sort_by(fn epic ->
-      {stage_rank(memberships[epic.key].stage), Foreman.Beads.Id.sort_key(epic.key)}
+      {Foreman.Priority.order_key(epic), stage_rank(memberships[epic.key].stage),
+       Foreman.Beads.Id.sort_key(epic.key)}
     end)
     |> Enum.reduce({[], visited}, fn epic, {acc, visited} ->
       if MapSet.member?(visited, epic.key) do

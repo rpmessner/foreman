@@ -11,6 +11,7 @@ defmodule ForemanWeb.TicketDetail do
       if ticket,
         do:
           Map.merge(ticket, %{
+            priority: Foreman.Priority.for_keys([key])[key],
             launchable: Foreman.Sessions.launchable?(Foreman.Sessions.target(key)),
             planning_session: Foreman.Sessions.get(key),
             files?:
@@ -98,6 +99,34 @@ defmodule ForemanWeb.TicketDetail do
     refresh(socket)
   end
 
+  def priority(%{assigns: %{ticket_key: key, ticket: ticket}} = socket, params)
+      when not is_nil(ticket) do
+    result =
+      case params do
+        %{"action" => "jump"} ->
+          Foreman.Priority.jump(key, "user")
+
+        %{"priority" => value} when is_binary(value) ->
+          case Integer.parse(value) do
+            {level, ""} -> Foreman.Priority.set(key, level, "user")
+            _ -> {:error, :invalid_priority}
+          end
+
+        _ ->
+          {:error, :invalid_priority}
+      end
+
+    socket =
+      case result do
+        {:ok, _} -> socket
+        _ -> Phoenix.LiveView.put_flash(socket, :error, "Priority not updated")
+      end
+
+    refresh(socket)
+  end
+
+  def priority(socket, _params), do: socket
+
   attr :ticket, :any, required: true
   attr :state, :atom, required: true
   attr :return_to, :string, required: true
@@ -139,6 +168,11 @@ defmodule ForemanWeb.TicketDetail do
 
   @doc "The ticket's header and tabs, shown in the ticket sheet or the Needs you side panel."
   def content(assigns) do
+    priority = if assigns.ticket.priority, do: assigns.ticket.priority.priority, else: nil
+
+    assigns =
+      assign(assigns, :priority_form, to_form(%{"priority" => to_string(priority)}, as: nil))
+
     ~H"""
     <header class="space-y-3">
       <div class="flex items-center gap-3 text-xs text-foreground-softer">
@@ -175,13 +209,41 @@ defmodule ForemanWeb.TicketDetail do
           ]["total"]}
         </Badge.badge>
         <Badge.badge>{@ticket.raw["issue_type"] || "ticket"}</Badge.badge>
-        <Badge.badge :if={@ticket.raw["priority"] != nil}>P{@ticket.raw["priority"]}</Badge.badge>
+        <span id="ticket-priority">
+          <ForemanWeb.PriorityBadge.badge priority={@ticket.priority && @ticket.priority.priority} />
+        </span>
       </div>
       <ForemanWeb.PreviewControls.controls
         :if={@ticket.preview}
         preview={@ticket.preview}
         terminal={@ticket.stage in [:merged, :done, :abandoned, "merged", "done", "abandoned"]}
       />
+      <.form
+        :if={@ticket.priority}
+        for={@priority_form}
+        id="ticket-priority-form"
+        phx-change="priority"
+        class="flex flex-wrap items-end gap-2"
+      >
+        <.input
+          type="select"
+          field={@priority_form[:priority]}
+          id="ticket-priority-select"
+          label="Priority"
+          class="block min-h-10 w-24 rounded-md border border-base bg-base px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+          options={Enum.map(Foreman.Priority.levels(), &{"P#{&1}", &1})}
+        />
+        <button
+          :if={@ticket.stage == :queued}
+          type="button"
+          id="ticket-jump"
+          phx-click="priority"
+          phx-value-action="jump"
+          class="mb-2 min-h-10 rounded-md border border-base px-3 py-2 text-sm transition hover:bg-sunken"
+        >
+          Jump to front
+        </button>
+      </.form>
       <div id="ticket-actions" class="flex flex-wrap gap-2">
         <ForemanWeb.PlanningSession.launch_button
           id="ticket-launch"

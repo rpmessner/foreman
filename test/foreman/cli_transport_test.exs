@@ -111,6 +111,37 @@ defmodule Foreman.CLITransportTest do
            ]
   end
 
+  test "ls --overlay retains items and adds priority overrides and jumps" do
+    Foreman.Beads.Projection.replace(
+      "sample",
+      Jason.encode!(%{
+        id: "s-1",
+        title: "Ticket",
+        issue_type: "task",
+        status: "open",
+        priority: 3
+      })
+    )
+
+    assert {:ok, 0} = Foreman.Priority.jump({"sample", "s-1"}, "user")
+    Req.Test.stub(__MODULE__, fn conn -> ForemanWeb.Endpoint.call(conn, []) end)
+
+    output =
+      capture_io(fn ->
+        assert CLI.run(["ls", "--overlay", "--project", "sample", "--json"],
+                 req_options: [plug: {Req.Test, __MODULE__}]
+               ) == 0
+      end)
+
+    body = Jason.decode!(output)
+    assert body["items"] == [%{"repo" => "sample", "id" => "s-1", "stage" => "queued"}]
+
+    assert [%{"id" => "s-1", "priority" => 0, "file_priority" => 3, "actor" => "user"}] =
+             body["priority_overrides"]
+
+    assert [%{"repo" => "sample", "id" => "s-1", "actor" => "user"}] = body["jumps"]
+  end
+
   test "JSON mode also covers malformed CLI input" do
     output = capture_io(fn -> assert CLI.run(["review", "s-1", "--typo", "--json"]) == 0 end)
     assert Jason.decode!(output)["warning"] =~ "usage"

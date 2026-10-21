@@ -9,6 +9,7 @@ defmodule ForemanWeb.NeedsYouLive do
     {:ok,
      socket
      |> assign(:pending_ids, MapSet.new())
+     |> assign(:pending_items, %{})
      |> assign(panel: Foreman.CardPanel.__fsm__(:initial), panel_doc: nil, card_repos: [])
      |> stream_configure(:uncollected, dom_id: &("uncollected-" <> &1.id))
      |> stream_configure(:pending, dom_id: &("request-" <> &1.id))
@@ -53,6 +54,9 @@ defmodule ForemanWeb.NeedsYouLive do
       do: {:noreply, socket},
       else: {:noreply, push_patch(socket, to: "/needs-you")}
   end
+
+  def handle_event("priority", params, socket),
+    do: {:noreply, socket |> ForemanWeb.TicketDetail.priority(params) |> refresh()}
 
   def handle_event("close-ticket", params, socket),
     do: {:noreply, ForemanWeb.TicketDetail.close(socket, params)}
@@ -145,9 +149,16 @@ defmodule ForemanWeb.NeedsYouLive do
   defp result(socket, {:navigate, path}), do: push_navigate(socket, to: path)
 
   defp result(socket, {:card, id, card}) do
-    case Requests.get(id) do
-      %{state: "pending"} = request -> stream_insert(socket, :pending, item(request, card))
-      _ -> refresh(socket)
+    case Enum.find(Requests.pending(), &(&1.id == id)) do
+      %{} = request ->
+        entry = item(request, card)
+
+        socket
+        |> assign(:pending_items, Map.put(socket.assigns.pending_items, id, entry))
+        |> stream_insert(:pending, entry)
+
+      _ ->
+        refresh(socket)
     end
   end
 
@@ -162,23 +173,32 @@ defmodule ForemanWeb.NeedsYouLive do
     socket = assign(socket, :card_repos, Foreman.CardText.repos())
     previous = socket.assigns.pending_ids
 
-    # Pending facts are immutable. Leave existing cards mounted so reconciliation
-    # cannot erase an answer or note the user is still composing.
+    # Update only changed read models. The hook moves existing nodes on priority
+    # edits, preserving forms (including unfocused answers) rather than resetting.
     socket =
       Enum.reduce(MapSet.difference(previous, ids), socket, fn id, socket ->
         stream_delete_by_dom_id(socket, :pending, "request-" <> id)
+      end)
+
+    entries =
+      Map.new(pending, fn request ->
+        old = socket.assigns.pending_items[request.id]
+        {request.id, item(request, if(old, do: old.card, else: :ready))}
       end)
 
     socket =
       pending
       |> Enum.with_index()
       |> Enum.reduce(socket, fn {request, index}, socket ->
-        if MapSet.member?(previous, request.id),
+        entry = entries[request.id]
+
+        if socket.assigns.pending_items[request.id] == entry,
           do: socket,
-          else: stream_insert(socket, :pending, item(request), at: index)
+          else: stream_insert(socket, :pending, entry, at: index)
       end)
 
     socket
+    |> assign(:pending_items, entries)
     |> assign(:pending_ids, ids)
     |> ForemanWeb.RequestCount.refresh()
     |> assign(:uncollected_count, length(Requests.not_picked_up()))
@@ -215,7 +235,12 @@ defmodule ForemanWeb.NeedsYouLive do
               <h1 class="text-xl font-semibold">Needs you</h1>
               <Badge.badge :if={@pending_count > 0}>{@pending_count}</Badge.badge>
             </header>
-            <div id="pending-requests" phx-update="stream" class="max-w-3xl space-y-5">
+            <div
+              id="pending-requests"
+              phx-update="stream"
+              phx-hook="PriorityOrder"
+              class="max-w-3xl space-y-5"
+            >
               <div
                 id="inbox-empty"
                 class="hidden only:block rounded-xl border border-dashed border-base p-10 text-center text-foreground-softer"
@@ -310,7 +335,11 @@ defmodule ForemanWeb.NeedsYouLive do
       )
 
     ~H"""
-    <article id={@id} class="rounded-xl border border-base bg-base p-5 shadow-sm sm:p-6">
+    <article
+      id={@id}
+      data-priority-order={@request.priority_order}
+      class="rounded-xl border border-base bg-base p-5 shadow-sm sm:p-6"
+    >
       <div class="mb-4 flex flex-wrap items-center gap-2 text-xs text-foreground-softer">
         <Badge.badge>Session waiting</Badge.badge>
         <ForemanWeb.RequestCard.ticket_link
@@ -503,7 +532,11 @@ defmodule ForemanWeb.NeedsYouLive do
     assigns = assign(assigns, :form, to_form(%{"note" => ""}, as: :decision))
 
     ~H"""
-    <article id={@id} class="rounded-xl border border-base bg-base p-5 shadow-sm sm:p-6">
+    <article
+      id={@id}
+      data-priority-order={@request.priority_order}
+      class="rounded-xl border border-base bg-base p-5 shadow-sm sm:p-6"
+    >
       <div class="mb-4 flex flex-wrap items-center gap-2 text-xs text-foreground-softer">
         <Badge.badge>
           {%{"push" => "Push", "open_pr" => "Open PR", "merge" => "Merge"}[@request.kind]}
@@ -576,7 +609,11 @@ defmodule ForemanWeb.NeedsYouLive do
       )
 
     ~H"""
-    <article id={@id} class="rounded-xl border border-base bg-base p-5 shadow-sm sm:p-6">
+    <article
+      id={@id}
+      data-priority-order={@request.priority_order}
+      class="rounded-xl border border-base bg-base p-5 shadow-sm sm:p-6"
+    >
       <div class="mb-4 flex flex-wrap items-center gap-2 text-xs text-foreground-softer">
         <Badge.badge>Decision</Badge.badge>
         <ForemanWeb.RequestCard.ticket_link

@@ -230,6 +230,9 @@ defmodule ForemanWeb.PullRequestsLive do
   def handle_event("launch-session", params, socket),
     do: {:noreply, socket |> ForemanWeb.PlanningSession.launch(params) |> refresh()}
 
+  def handle_event("priority", params, socket),
+    do: {:noreply, socket |> ForemanWeb.TicketDetail.priority(params) |> refresh()}
+
   def handle_event("preview", params, socket),
     do: {:noreply, ForemanWeb.TicketDetail.preview(socket, params)}
 

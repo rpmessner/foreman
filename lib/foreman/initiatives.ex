@@ -88,6 +88,7 @@ defmodule Foreman.Initiatives do
             )
         }
       end)
+      |> Foreman.Priority.sort()
 
     epic_aliases =
       Map.new(epics, &{{&1.repo_key, &1.bead_id}, {&1.repo_key, &1.beads_epic_id || &1.bead_id}})
@@ -106,13 +107,16 @@ defmodule Foreman.Initiatives do
       tree.orphans
       |> Enum.reject(&(&1.status == "closed"))
       |> Enum.sort_by(fn ticket ->
-        case ticket.created_at do
-          nil ->
-            {1, 0, Foreman.Beads.Id.sort_key(ticket.key)}
+        age =
+          case ticket.created_at do
+            nil ->
+              {1, 0, Foreman.Beads.Id.sort_key(ticket.key)}
 
-          time ->
-            {0, -DateTime.to_unix(time, :microsecond), Foreman.Beads.Id.sort_key(ticket.key)}
-        end
+            time ->
+              {0, -DateTime.to_unix(time, :microsecond), Foreman.Beads.Id.sort_key(ticket.key)}
+          end
+
+        {Foreman.Priority.order_key(ticket), age}
       end)
       |> Enum.split_with(&(&1.stage != :queued or MapSet.member?(activity, &1.key)))
 
