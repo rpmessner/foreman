@@ -111,6 +111,8 @@ defmodule Foreman.TicketFiles do
       "created_at" => timestamp(facts["created"]),
       "closed_at" => timestamp(facts["closed"]),
       "close_reason" => facts["close_reason"],
+      "on_hold_reason" => facts["on_hold_reason"],
+      "on_hold_since" => timestamp(facts["on_hold_since"]),
       "description" =>
         Regex.replace(~r/^## (?:Acceptance|Notes)\r?\n.*?(?=^## |\z)/ms, body, "")
         |> String.trim(),

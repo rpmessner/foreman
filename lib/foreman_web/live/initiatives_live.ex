@@ -185,6 +185,7 @@ defmodule ForemanWeb.InitiativesLive do
       done_count: length(finished),
       orphan_count: length(data.orphans),
       standalone_count: length(data.standalone),
+      on_hold_count: length(data.on_hold),
       advanced_count: Filters.advanced_count(filters, data.views),
       form: to_form(socket.assigns.filters, as: :filters)
     )
@@ -193,6 +194,11 @@ defmodule ForemanWeb.InitiativesLive do
     |> stream(:done, done_rows, reset: true)
     |> stream(:unplanned, unplanned, reset: true)
     |> stream(:standalone, standalone, reset: true)
+    |> stream(
+      :on_hold,
+      project_rows(data.on_hold, socket.assigns.expanded, "on-hold", "on-hold-"),
+      reset: true
+    )
   end
 
   defp project_rows(tickets, expanded, section, prefix) do
@@ -329,7 +335,8 @@ defmodule ForemanWeb.InitiativesLive do
             <span class="whitespace-nowrap">{@epic_count} active ·</span>
             <span class="whitespace-nowrap">{@done_count} done ·</span>
             <span class="whitespace-nowrap">{@standalone_count} standalone ·</span>
-            <span class="whitespace-nowrap">{@orphan_count} unplanned</span>
+            <span class="whitespace-nowrap">{@orphan_count} unplanned ·</span>
+            <span class="whitespace-nowrap">{@on_hold_count} on hold</span>
           </span>
         </header>
         <section
@@ -449,7 +456,8 @@ defmodule ForemanWeb.InitiativesLive do
                 {"Closed", "closed"},
                 {"In progress", "in_progress"},
                 {"Blocked", "blocked"},
-                {"Deferred", "deferred"}
+                {"Deferred", "deferred"},
+                {"On hold", "on_hold"}
               ]}
             />
             <.input
@@ -573,6 +581,14 @@ defmodule ForemanWeb.InitiativesLive do
           title="Unplanned"
           count={@orphan_count}
           rows={@streams.unplanned}
+          expanded={@expanded}
+          uri={@page_uri}
+        />
+        <.parentless_section
+          id="on-hold"
+          title="On hold"
+          count={@on_hold_count}
+          rows={@streams.on_hold}
           expanded={@expanded}
           uri={@page_uri}
         />
@@ -700,6 +716,9 @@ defmodule ForemanWeb.InitiativesLive do
                   </.link>
                   <span class="font-mono text-xs text-foreground-softer">{row.bead_id}</span>
                   <ForemanWeb.PriorityBadge.badge priority={row.priority} />
+                  <Badge.badge :if={row.status == "on_hold"} data-ticket-status="on_hold">
+                    On hold
+                  </Badge.badge>
                   <Badge.badge :if={row.stale} color="warning" class="ml-2">stale</Badge.badge>
                 </div>
               </div>
@@ -776,20 +795,40 @@ defmodule ForemanWeb.InitiativesLive do
   defp ticket(assigns) do
     ~H"""
     <.link
-      patch={Foreman.TicketSheet.path(@uri, @row.key)}
+      patch={if @row.type != "epic", do: Foreman.TicketSheet.path(@uri, @row.key)}
+      navigate={if @row.type == "epic", do: epic_path(@row.key, @uri)}
       class="bb-ticket items-center gap-3 border-t border-base px-5 py-3 hover:bg-sunken"
       style={"padding-left: #{24 + @row.depth * 16}px"}
     >
       <span class="bb-ticket-id shrink-0 truncate font-mono text-xs text-foreground-softer md:w-28">
         {@row.bead_id}
       </span>
-      <span class="bb-ticket-title min-w-0 flex-1 text-sm">{@row.title}</span>
+      <span class="bb-ticket-title min-w-0 flex-1 text-sm">
+        {@row.title}
+        <span
+          :if={@row.status == "on_hold"}
+          class="mt-1 block break-words text-xs text-foreground-softer"
+        >
+          <span
+            :for={epic <- Map.get(@row, :on_hold_epics, [])}
+            data-hold-epic={epic.id}
+            class="block"
+          >
+            {epic.id} · {epic.title}
+          </span>
+          {@row.on_hold_reason}
+          <span :if={@row.on_hold_since} data-hold-since class="block">
+            Since <ForemanWeb.TicketDetail.timestamp at={@row.on_hold_since} />
+          </span>
+        </span>
+      </span>
       <span class="bb-ticket-stage flex items-center gap-2">
         <ForemanWeb.PriorityBadge.badge priority={@row.priority} />
+        <Badge.badge :if={@row.status == "on_hold"} data-ticket-status="on_hold">On hold</Badge.badge>
         <Badge.badge color={stage_color(@row.stage)}>{@row.stage}</Badge.badge>
       </span>
-      <span class="text-xs text-foreground-softer">
-        {@row.type} · {@row.status}
+      <span class="col-span-2 text-xs text-foreground-softer">
+        {@row.type}<span :if={@row.status != "on_hold"}> · {ForemanWeb.TicketDetail.status_label(@row.status)}</span>
         <span :if={@row.created_at} class="whitespace-nowrap">
           · <ForemanWeb.TicketDetail.timestamp at={@row.created_at} />
         </span>

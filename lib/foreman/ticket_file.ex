@@ -1,9 +1,9 @@
 defmodule Foreman.TicketFile do
   @moduledoc "Shared ticket Markdown codec. String-keyed facts and an opaque Markdown body."
-  @keys ~w(id title type status priority parent blocked_by related supersedes discovered_from labels created closed close_reason)
+  @keys ~w(id title type status priority parent blocked_by related supersedes discovered_from labels created closed close_reason on_hold_reason on_hold_since)
   @lists ~w(blocked_by related supersedes labels)
   @types ~w(epic feature task bug decision chore)
-  @statuses ~w(open in_progress closed deferred)
+  @statuses ~w(open in_progress closed deferred on_hold)
 
   def keys, do: @keys
   def types, do: @types
@@ -28,7 +28,7 @@ defmodule Foreman.TicketFile do
 
   def validate(facts) do
     unknown = Map.keys(facts) -- @keys
-    missing = (@keys -- ["supersedes"]) -- Map.keys(facts)
+    missing = (@keys -- ~w(supersedes on_hold_reason on_hold_since)) -- Map.keys(facts)
 
     cond do
       unknown != [] ->
@@ -48,6 +48,13 @@ defmodule Foreman.TicketFile do
 
       facts["status"] not in @statuses ->
         {:error, "invalid status"}
+
+      (facts["status"] == "on_hold" and not text?(facts["on_hold_reason"])) or
+          not (is_nil(facts["on_hold_reason"]) or text?(facts["on_hold_reason"])) ->
+        {:error, "on_hold_reason must be nonempty text for on_hold status"}
+
+      not (is_nil(facts["on_hold_since"]) or date?(facts["on_hold_since"])) ->
+        {:error, "on_hold_since must be an ISO date or null"}
 
       facts["priority"] not in 0..4 ->
         {:error, "priority must be 0..4"}
@@ -86,7 +93,11 @@ defmodule Foreman.TicketFile do
 
   def print(%{facts: facts, body: body}) do
     facts = Map.put_new(facts, "supersedes", [])
-    header = Enum.map_join(@keys, "\n", fn key -> "#{key}: #{scalar(key, facts[key])}" end)
+
+    keys =
+      Enum.filter(@keys, &(&1 not in ~w(on_hold_reason on_hold_since) or not is_nil(facts[&1])))
+
+    header = Enum.map_join(keys, "\n", fn key -> "#{key}: #{scalar(key, facts[key])}" end)
 
     "---\n" <>
       header <>
@@ -96,7 +107,10 @@ defmodule Foreman.TicketFile do
 
   defp scalar(key, values) when key in @lists, do: Jason.encode!(Enum.sort(values))
   defp scalar(_, nil), do: "null"
-  defp scalar(key, value) when key in ~w(title close_reason), do: Jason.encode!(value)
+
+  defp scalar(key, value) when key in ~w(title close_reason on_hold_reason),
+    do: Jason.encode!(value)
+
   defp scalar(_, value), do: to_string(value)
   defp text?(value), do: is_binary(value) and String.trim(value) != ""
   defp nullable_id?(value), do: is_nil(value) or valid_id?(value)

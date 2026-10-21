@@ -45,6 +45,57 @@ defmodule Foreman.TicketCLITest do
     assert Enum.map(call(root, ["ls"]), & &1["id"]) == [low, high]
   end
 
+  test "on hold requires a fresh reason, persists it, and clears it on resume", %{root: root} do
+    id = call(root, ["new", "Wait for hardware"])["id"]
+    path = Path.join([root, "tickets", id <> ".md"])
+    before = File.read!(path)
+
+    for args <- [["--status", "on_hold"], ["--status", "on_hold", "--reason", "  "]] do
+      assert call(root, ["update", id] ++ args, 2)["error"] =~ "reason"
+      assert File.read!(path) == before
+    end
+
+    held = call(root, ["update", id, "--status", "on_hold", "--reason", "Waiting: parts\narrive"])
+    assert held["status"] == "on_hold"
+    assert held["on_hold_reason"] == "Waiting: parts\narrive"
+    assert held["on_hold_since"] == Date.to_iso8601(Date.utc_today())
+    assert call(root, ["check"])["valid"]
+    assert call(root, ["show", id])["on_hold_reason"] == held["on_hold_reason"]
+    assert call(root, ["ready"]) == []
+    assert call(root, ["update", id, "--status", "on_hold"], 2)["error"] =~ "reason"
+    resumed = call(root, ["reopen", id])
+    assert resumed["status"] == "open"
+    assert resumed["on_hold_reason"] == nil
+    assert resumed["on_hold_since"] == nil
+    assert call(root, ["check"])["valid"]
+    refute File.read!(path) =~ "on_hold_"
+  end
+
+  test "new on hold tickets require a reason and leaving hold clears its file facts", %{
+    root: root
+  } do
+    assert call(root, ["new", "Wait", "--status", "on_hold"], 2)["error"] =~ "reason"
+
+    for status <- ~w(open in_progress deferred closed) do
+      ticket = call(root, ["new", "Wait", "--status", "on_hold", "--reason", "Awaiting review"])
+      id = ticket["id"]
+      assert ticket["on_hold_reason"] == "Awaiting review"
+
+      assert call(root, ["update", id, "--title", "Still waiting"])["on_hold_reason"] ==
+               "Awaiting review"
+
+      updated =
+        if status == "closed",
+          do: call(root, ["close", id, "--reason", "No longer needed"]),
+          else: call(root, ["update", id, "--status", status])
+
+      assert updated["status"] == status
+      refute File.read!(Path.join([root, "tickets", id <> ".md"])) =~ "on_hold_"
+    end
+
+    assert call(root, ["check"])["valid"]
+  end
+
   test "an empty configured checkout lists tickets without a server", %{root: root} do
     assert call(root, ["ls"]) == []
     assert call(root, ["ready"]) == []

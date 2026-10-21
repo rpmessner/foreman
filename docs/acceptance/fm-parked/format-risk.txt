@@ -1,0 +1,1 @@
+Legacy byte identity and resumed parsing: PASS; old CLI rejects held files as documented

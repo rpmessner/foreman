@@ -99,7 +99,7 @@ defmodule ForemanWeb.EpicLive do
               <div class="flex gap-2">
                 <Badge.badge color="info">{@epic.stage}</Badge.badge>
                 <Badge.badge>epic</Badge.badge>
-                <Badge.badge>bd: {@epic.status}</Badge.badge>
+                <Badge.badge>bd: {ForemanWeb.TicketDetail.status_label(@epic.status)}</Badge.badge>
               </div>
               <h1 id="epic-title" class="text-2xl font-semibold">{@epic.title}</h1>
               <p class="text-xs text-foreground-softer">
@@ -189,7 +189,9 @@ defmodule ForemanWeb.EpicLive do
                       </p>
                       <div class="flex flex-wrap gap-1">
                         <Badge.badge color={stage_color(ticket.stage)}>{ticket.stage}</Badge.badge>
-                        <Badge.badge>{ticket.status}</Badge.badge>
+                        <Badge.badge>
+                          {ForemanWeb.TicketDetail.status_label(ticket.status)}
+                        </Badge.badge>
                         <ForemanWeb.PriorityBadge.badge priority={ticket.priority} />
                       </div>
                     </.link>

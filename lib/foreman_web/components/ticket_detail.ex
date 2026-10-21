@@ -200,8 +200,7 @@ defmodule ForemanWeb.TicketDetail do
           <Badge.badge color="info">{@ticket.stage}</Badge.badge>
         </span>
         <Badge.badge id="ticket-status">
-          {if !@ticket.files?, do: "bd: "}{@ticket.raw["status"] ||
-            "unavailable"}
+          {if !@ticket.files?, do: "bd: "}{status_label(@ticket.raw["status"] || "unavailable")}
         </Badge.badge>
         <Badge.badge :if={@ticket.raw["acceptance_progress"]} id="ticket-acceptance-progress">
           Acceptance {@ticket.raw["acceptance_progress"]["checked"]}/{@ticket.raw[
@@ -213,6 +212,22 @@ defmodule ForemanWeb.TicketDetail do
           <ForemanWeb.PriorityBadge.badge priority={@ticket.priority && @ticket.priority.priority} />
         </span>
       </div>
+      <section
+        :if={@ticket.raw["status"] == "on_hold"}
+        class="space-y-1 rounded-lg border border-base p-3"
+      >
+        <h3 class="bb-label">On hold reason</h3>
+        <p id="ticket-on-hold-reason" class="whitespace-pre-wrap break-words text-sm">
+          {@ticket.raw["on_hold_reason"]}
+        </p>
+        <p
+          :if={@ticket.raw["on_hold_since"]}
+          id="ticket-on-hold-since"
+          class="text-xs text-foreground-softer"
+        >
+          Since <.timestamp at={@ticket.raw["on_hold_since"]} />
+        </p>
+      </section>
       <ForemanWeb.PreviewControls.controls
         :if={@ticket.preview}
         preview={@ticket.preview}
@@ -611,11 +626,14 @@ defmodule ForemanWeb.TicketDetail do
     end)
   end
 
+  def status_label("on_hold"), do: "On hold"
+  def status_label(status), do: status
+
   defp extra_fields(raw),
     do:
       raw
       |> Map.drop(
-        ~w(id title status issue_type priority description acceptance_criteria acceptance_progress design notes dependencies)
+        ~w(id title status issue_type priority description acceptance_criteria acceptance_progress design notes dependencies on_hold_reason on_hold_since)
       )
       |> Enum.reject(fn {_key, value} -> value in [nil, [], ""] end)
       |> Enum.sort()

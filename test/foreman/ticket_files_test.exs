@@ -31,6 +31,25 @@ defmodule Foreman.TicketFilesTest do
     })
   end
 
+  test "on hold facts survive file decoding and export projection", %{root: root, path: path} do
+    input =
+      text("Waiting")
+      |> String.replace("status: open", "status: on_hold")
+      |> String.replace(
+        "close_reason: null",
+        "close_reason: null\non_hold_reason: \"Awaiting parts\"\non_hold_since: 2026-10-21"
+      )
+
+    File.write!(path, input)
+    assert {:ok, snapshot} = TicketFiles.snapshot(root)
+    assert {[raw], []} = TicketFiles.decode(snapshot, [])
+    assert raw["on_hold_reason"] == "Awaiting parts"
+    assert raw["on_hold_since"] == "2026-10-21T00:00:00Z"
+    assert {:ok, %{beads: [bead]}} = Foreman.Beads.Export.decode(Jason.encode!(raw))
+    assert bead.status == :on_hold
+    assert bead.raw["on_hold_reason"] == "Awaiting parts"
+  end
+
   test "malformed files retain their last good row and name the error", %{root: root, path: path} do
     File.write!(path, text("Good"))
     {:ok, snapshot} = TicketFiles.snapshot(root)
