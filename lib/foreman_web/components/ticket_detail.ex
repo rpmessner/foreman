@@ -393,14 +393,19 @@ defmodule ForemanWeb.TicketDetail do
           </div>
           <div :if={extra_fields(@ticket.raw) != []}>
             <h3 class="bb-label mb-3">
-              {if @ticket.raw["acceptance_progress"], do: "Ticket fields", else: "Beads fields"}
+              Ticket fields
             </h3>
             <dl class="grid grid-cols-[120px_minmax(0,1fr)] gap-2 text-xs">
               <%= for {key, value} <- extra_fields(@ticket.raw) do %>
                 <dt class="text-foreground-softer">{String.replace(key, "_", " ")}</dt>
                 <dd class="break-words">
-                  <%= if @ticket.raw["acceptance_progress"] && key in ~w(created_at closed_at) do %>
-                    <.timestamp at={value} />
+                  <%= if key in ~w(created_at updated_at closed_at) do %>
+                    <.timestamp
+                      at={value}
+                      date_only={
+                        @ticket.raw["acceptance_progress"] && key in ~w(created_at closed_at)
+                      }
+                    />
                   <% else %>
                     <div class="fm-markdown">
                       {Phoenix.HTML.raw(Foreman.TicketDocuments.render(value, @ticket))}
@@ -547,6 +552,7 @@ defmodule ForemanWeb.TicketDetail do
   end
 
   attr :at, :any, required: true
+  attr :date_only, :boolean, default: false
 
   def timestamp(assigns) do
     time =
@@ -556,6 +562,15 @@ defmodule ForemanWeb.TicketDetail do
 
         %DateTime{} = time ->
           time
+
+        # Ticket files store dates; the projection pads them to midnight UTC.
+        text when is_binary(text) and assigns.date_only and byte_size(text) >= 10 ->
+          date = binary_part(text, 0, 10)
+
+          case Date.from_iso8601(date) do
+            {:ok, _date} -> {:date, date}
+            _ -> nil
+          end
 
         text when is_binary(text) ->
           case DateTime.from_iso8601(text) do
@@ -568,13 +583,25 @@ defmodule ForemanWeb.TicketDetail do
       end
 
     assigns =
-      assign(assigns,
-        full: time && DateTime.to_iso8601(time),
-        relative: time && ForemanWeb.RelativeTime.format(time)
-      )
+      case time do
+        {:date, date} ->
+          assign(assigns, date: date, full: nil, relative: nil)
+
+        %DateTime{} = time ->
+          full = DateTime.to_iso8601(time)
+          assign(assigns, date: nil, full: full, relative: ForemanWeb.RelativeTime.format(time))
+
+        nil ->
+          assign(assigns, date: nil, full: nil, relative: nil)
+      end
 
     ~H"""
-    <time :if={@full} datetime={@full} title={@full}>{@relative}</time><span :if={is_nil(@full)}>—</span>
+    <time :if={@date} datetime={@date} title={@date}>
+      {Date.from_iso8601!(@date) |> Calendar.strftime("%b %-d")}
+    </time>
+    <time :if={@full} datetime={@full} title={@full}>{@relative}</time><span :if={
+      is_nil(@full) && is_nil(@date)
+    }>—</span>
     """
   end
 

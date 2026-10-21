@@ -358,7 +358,48 @@ defmodule ForemanWeb.InitiativesLiveTest do
     Foreman.Beads.Projection.replace("sample", Jason.encode!(raw))
     {:ok, view, _} = live(conn, "/?ticket=sample:progress")
     assert has_element?(view, "#ticket-acceptance-progress", "1/3")
-    assert has_element?(view, "#ticket-overview time[datetime='2026-10-18T00:00:00Z']")
+
+    assert has_element?(
+             view,
+             "#ticket-overview time[datetime='2026-10-18'][title='2026-10-18']",
+             "Oct 18"
+           )
+  end
+
+  test "date-only created field renders as a date without a time title", %{conn: conn} do
+    raw =
+      b("date-only", "task")
+      |> Map.put(:acceptance_progress, %{"checked" => 1, "total" => 3})
+      |> Map.put(:created_at, "2026-10-21T00:00:00Z")
+
+    Foreman.Beads.Projection.replace("sample", Jason.encode!(raw))
+    {:ok, view, _} = live(conn, "/?ticket=sample:date-only")
+    refute has_element?(view, "#ticket-overview time[title='2026-10-21T00:00:00Z']")
+
+    assert has_element?(
+             view,
+             "#ticket-overview time[datetime='2026-10-21'][title='2026-10-21']",
+             "Oct 21"
+           )
+  end
+
+  test "overview labels ticket fields and formats each time field", %{conn: conn} do
+    raw =
+      b("times", "task")
+      |> Map.put(:acceptance_progress, %{"checked" => 1, "total" => 3})
+      |> Map.merge(%{created_at: "2026-10-18T00:00:00Z", updated_at: "2026-10-19T00:00:00Z"})
+
+    Foreman.Beads.Projection.replace("sample", Jason.encode!(raw))
+    {:ok, view, _} = live(conn, "/?ticket=sample:times")
+    assert has_element?(view, "#ticket-overview h3", "Ticket fields")
+    refute has_element?(view, "#ticket-overview h3", "Beads fields")
+
+    assert has_element?(view, "#ticket-overview time[datetime='2026-10-18'][title='2026-10-18']")
+
+    assert has_element?(
+             view,
+             "#ticket-overview time[datetime='2026-10-19T00:00:00Z'][title='2026-10-19T00:00:00Z']"
+           )
   end
 
   test "sheet tab is selected from valid, unknown and missing URL params", %{conn: conn} do
