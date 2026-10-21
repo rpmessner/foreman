@@ -8,8 +8,20 @@ defmodule Foreman.DeployTest do
     File.mkdir_p!(Path.join(old, "bin"))
     File.write!(Path.join(old, "bin/foreman"), "old")
     File.ln_s!("releases/previous", Path.join(root, "current"))
+    env_file = Path.join(root, "runtime.env")
+    File.write!(env_file, "DATABASE_URL=ecto://test:private@localhost/test\n")
     on_exit(fn -> File.rm_rf!(root) end)
-    %{root: root, releases: releases}
+    %{root: root, releases: releases, env_file: env_file}
+  end
+
+  test "migration phase precedes stop and fails without rollback" do
+    assert Foreman.DeployLifecycle.step(:installing, :succeeded, %{}) ==
+             {:migrating, [run: :migrate]}
+
+    assert Foreman.DeployLifecycle.step(:migrating, :succeeded, %{}) ==
+             {:stopping, [run: :stop]}
+
+    assert Foreman.DeployLifecycle.step(:migrating, :failed, %{}) == {:failed, []}
   end
 
   test "release smoke selects the installed path rather than the build directory" do
@@ -33,6 +45,84 @@ defmodule Foreman.DeployTest do
       refute_received {:command, "mix", _, _}
       assert File.read_link!(Path.join(ctx.root, "current")) == "releases/previous"
     end
+  end
+
+  test "migration failure leaves current and running services untouched without leaking output",
+       ctx do
+    File.write!(Path.join(ctx.root, "services"), "running")
+
+    logs =
+      ExUnit.CaptureLog.capture_log(fn ->
+        captured =
+          ExUnit.CaptureIO.capture_io(fn ->
+            assert {:error, output} = deploy(ctx, [], migration_status: 1)
+            assert output =~ "migrate failed"
+            refute output =~ "private"
+            refute output =~ "Rollback"
+          end)
+
+        refute captured =~ "private"
+      end)
+
+    refute logs =~ "private"
+    assert File.read_link!(Path.join(ctx.root, "current")) == "releases/previous"
+    assert File.read!(Path.join(ctx.root, "services")) == "running"
+    calls = commands()
+    refute Enum.any?(calls, fn {exe, _, _} -> exe in ["systemctl", "ln", "mv", "python3"] end)
+
+    assert Enum.any?(calls, fn
+             {exe, ["eval", code], env} ->
+               assert File.read!(exe) == "new release"
+               refute code =~ "private"
+               assert {"DATABASE_URL", "ecto://test:private@localhost/test"} in env
+               true
+
+             _ ->
+               false
+           end)
+
+    refute Enum.any?(calls, fn {exe, _, env} ->
+             not String.ends_with?(exe, "/bin/foreman") and
+               Enum.any?(env, fn {key, _} -> key == "DATABASE_URL" end)
+           end)
+  end
+
+  test "env-file flag overrides discovery and isolates values from other commands", ctx do
+    override = Path.join(ctx.root, "override.env")
+
+    File.write!(
+      override,
+      "DATABASE_URL=ecto://override:hidden@localhost/test\nSECRET_KEY_BASE=unrelated-secret\n"
+    )
+
+    captured =
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:ok, output} = deploy(ctx, ["--env-file", override], [])
+        refute output =~ "hidden"
+        refute output =~ "unrelated-secret"
+      end)
+
+    refute captured =~ "hidden"
+    refute captured =~ "unrelated-secret"
+
+    for {exe, args, env} <- commands() do
+      refute args |> Enum.join(" ") |> String.contains?("hidden")
+
+      if String.ends_with?(exe, "/bin/foreman") do
+        assert {"DATABASE_URL", "ecto://override:hidden@localhost/test"} in env
+        assert {"SECRET_KEY_BASE", nil} in env
+      else
+        refute Enum.any?(env, fn {key, _} -> key == "DATABASE_URL" end)
+        refute exe == "systemctl" and "show" in args
+      end
+    end
+  end
+
+  test "unreadable env file fails before stopping or switching", ctx do
+    assert {:error, output} = deploy(ctx, ["--env-file", Path.join(ctx.root, "missing")], [])
+    assert output =~ "migrate failed"
+    refute_received {:command, "systemctl", _, _}
+    assert File.read_link!(Path.join(ctx.root, "current")) == "releases/previous"
   end
 
   test "successful deploy switches to a new complete release and installs CLI last", ctx do
@@ -63,6 +153,7 @@ defmodule Foreman.DeployTest do
              {"mix", ["compile"]},
              {"mix", ["assets.deploy"]},
              {"mix", ["release", "--overwrite"]},
+             {Path.join(target, "bin/foreman"), ["eval", migration_code()]},
              {"systemctl", ["--user", "stop", "foreman-worker.service", "foreman-web.service"]},
              {"ln", ["-s", target, temporary]},
              {"mv", ["-Tf", temporary, Path.join(ctx.root, "current")]},
@@ -235,7 +326,14 @@ defmodule Foreman.DeployTest do
     end
 
     Foreman.Deploy.run(
-      flags ++ ["--releases-dir", ctx.releases, "--cli-path", Path.join(ctx.root, "cli/foreman")],
+      [
+        "--env-file",
+        ctx.env_file,
+        "--releases-dir",
+        ctx.releases,
+        "--cli-path",
+        Path.join(ctx.root, "cli/foreman")
+      ] ++ flags,
       cwd: ctx.root,
       command: runner
     )
@@ -267,6 +365,17 @@ defmodule Foreman.DeployTest do
 
         {"", 0}
 
+      {_, ["eval", _]} ->
+        if behavior[:pending] do
+          {Keyword.get(
+             behavior,
+             :pending_output,
+             "ecto://test:private@localhost/test\nFOREMAN_PENDING 20261021123456 add_requests\nFOREMAN_PENDING_DONE\n"
+           ), Keyword.get(behavior, :migration_status, 0)}
+        else
+          {"ecto://test:private@localhost/test", Keyword.get(behavior, :migration_status, 0)}
+        end
+
       {"python3", _} ->
         {"stub smoke", Keyword.get(behavior, :smoke_status, 0)}
 
@@ -278,12 +387,67 @@ defmodule Foreman.DeployTest do
     end
   end
 
+  defp migration_code do
+    {_, ["eval", code], _} = Foreman.DeployMigration.command("/unused", [], :migrate)
+    code
+  end
+
   defp commands(acc \\ []) do
     receive do
       {:command, exe, args, env} -> commands(acc ++ [{exe, args, env}])
     after
       0 -> acc
     end
+  end
+
+  test "dry run lists pending names with explicitly supplied environment and never migrates",
+       ctx do
+    bin = Path.join(ctx.root, "_build/prod/rel/foreman/bin")
+    File.mkdir_p!(bin)
+    File.write!(Path.join(bin, "foreman"), "built release")
+
+    captured =
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert {:ok, plan} = deploy(ctx, ["--dry-run"], pending: true)
+        assert plan =~ "20261021123456 add_requests"
+        refute plan =~ "private"
+      end)
+
+    refute captured =~ "private"
+    calls = commands()
+    assert Enum.count(calls, fn {_, args, _} -> match?(["eval", _], args) end) == 1
+
+    refute Enum.any?(calls, fn {exe, args, _} ->
+             exe == "mix" or exe == "systemctl" or args == ["eval", migration_code()]
+           end)
+
+    assert File.read_link!(Path.join(ctx.root, "current")) == "releases/previous"
+  end
+
+  test "dry run distinguishes no pending migrations from an unavailable query", ctx do
+    bin = Path.join(ctx.root, "_build/prod/rel/foreman/bin")
+    File.mkdir_p!(bin)
+    File.write!(Path.join(bin, "foreman"), "built release")
+
+    assert {:ok, plan} =
+             deploy(ctx, ["--dry-run"], pending: true, pending_output: "FOREMAN_PENDING_DONE\n")
+
+    assert plan =~ "Pending migrations: none"
+
+    for behavior <- [
+          [pending: true, pending_output: "private"],
+          [pending: true, migration_status: 1]
+        ] do
+      assert {:ok, plan} = deploy(ctx, ["--dry-run"], behavior)
+      assert plan =~ "Pending migrations unavailable"
+      refute plan =~ "private"
+    end
+  end
+
+  test "dry run reports unavailable when release is not built", ctx do
+    assert {:ok, plan} = deploy(ctx, ["--dry-run"], [])
+    assert plan =~ "Pending migrations unavailable"
+    refute Enum.any?(commands(), fn {_, args, _} -> match?(["eval", _], args) end)
   end
 
   test "dry run prints the ordered plan without changing the release", ctx do
@@ -307,6 +471,10 @@ defmodule Foreman.DeployTest do
     assert plan =~ "release-smoke.py --release"
     assert plan =~ "MIX_ENV=dev mix escript.build"
     assert plan =~ "Rollback"
+    assert plan =~ "Pending migrations unavailable"
+    assert plan =~ "--env-file"
+    assert plan =~ "Migrate with"
+    assert plan =~ "migration failure leaves current and services unchanged"
 
     positions =
       Enum.map(
@@ -315,6 +483,7 @@ defmodule Foreman.DeployTest do
           "mix assets.deploy",
           "mix release --overwrite",
           "Copy _build",
+          "Migrate with",
           "systemctl --user stop",
           "Atomically switch",
           "systemctl --user start",

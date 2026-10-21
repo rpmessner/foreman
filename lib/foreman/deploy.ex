@@ -8,14 +8,18 @@ defmodule Foreman.Deploy do
     releases_dir: :string,
     web_unit: :string,
     worker_unit: :string,
-    cli_path: :string
+    cli_path: :string,
+    env_file: :string
   ]
 
   def run(args, opts \\ []) do
     with {:ok, config} <- configure(args, opts),
          :ok <- preflight(config) do
       plan = plan(config)
-      if config.dry_run, do: {:ok, plan}, else: execute(config, plan)
+
+      if config.dry_run,
+        do: {:ok, plan <> Foreman.DeployMigration.pending(config)},
+        else: execute(config, plan)
     end
   rescue
     error -> {:error, Exception.message(error)}
@@ -39,6 +43,7 @@ defmodule Foreman.Deploy do
          current: current,
          target: Path.join(releases, id),
          id: id,
+         env_file: flags[:env_file],
          cli: Path.expand(flags[:cli_path] || "~/.local/bin/foreman"),
          web: flags[:web_unit] || "foreman-web.service",
          worker: flags[:worker_unit] || "foreman-worker.service",
@@ -96,6 +101,8 @@ defmodule Foreman.Deploy do
     MIX_ENV=prod mix assets.deploy
     MIX_ENV=prod mix release --overwrite
     Copy _build/prod/rel/foreman/. to #{c.target}
+    Migrate with #{c.target}/bin/foreman eval (environment files loaded as data into migration child only)
+    A migration failure leaves current and services unchanged; deploy stops
     systemctl --user stop #{c.worker} #{c.web}
     Atomically switch #{c.current} to #{c.target}
     systemctl --user start #{c.web} #{c.worker}
@@ -110,7 +117,7 @@ defmodule Foreman.Deploy do
   defp os_command("git", args, opts), do: System.cmd("git", args, opts)
 
   defp os_command(executable, args, opts) do
-    System.cmd(executable, args, Keyword.put(opts, :into, IO.stream(:stdio, :line)))
+    System.cmd(executable, args, Keyword.put_new(opts, :into, IO.stream(:stdio, :line)))
   end
 
   defp command(c, executable, args, env \\ []) do
@@ -197,6 +204,18 @@ defmodule Foreman.Deploy do
     File.cp_r!(source <> "/.", c.target)
     true = File.exists?(Path.join(c.target, "bin/foreman"))
     :ok
+  end
+
+  defp perform(:migrate, c) do
+    with {:ok, env} <- Foreman.DeployMigration.environment(c),
+         {executable, args, opts} <- Foreman.DeployMigration.command(c.target, env, :migrate),
+         {_, 0} <- c.command.(executable, args, opts ++ [cd: c.cwd, stderr_to_stdout: true]) do
+      :ok
+    else
+      _ -> {:error, "migrate failed; migration output suppressed; current and services unchanged"}
+    end
+  rescue
+    _ -> {:error, "migrate failed; migration output suppressed; current and services unchanged"}
   end
 
   defp perform(:stop, c), do: checked(c, "systemctl", ["--user", "stop", c.worker, c.web])

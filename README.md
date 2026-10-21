@@ -141,31 +141,23 @@ cp -a _build/prod/rel/foreman "$HOME/.local/lib/foreman/releases/$release_id"
 ln -s "releases/$release_id" "$HOME/.local/lib/foreman/current"
 ```
 
-Migrate before starting either service. Supply `DATABASE_URL` in the migration
-shell without adding it to shell history. The following hidden prompt works in
-Bash. Do not `source` systemd environment files; they are not shell scripts.
-
-```bash
-read -r -s -p 'DATABASE_URL: ' DATABASE_URL; printf '\n'
-export DATABASE_URL
-(umask 077
- FOREMAN_ROLE=worker RELEASE_DISTRIBUTION=none \
-   "$HOME/.local/lib/foreman/current/bin/foreman" eval \
-   '{:ok, _, _} = Ecto.Migrator.with_repo(Foreman.Repo, &Ecto.Migrator.run(&1, :up, all: true))')
-migration_status=$?
-unset DATABASE_URL
-test "$migration_status" -eq 0
-```
-
-Continue only if the migration succeeded. Then install and enable the units:
+Install the units without starting them, then use the deploy command to migrate
+and start the release. It reads the environment file as data, not a shell script;
+no database URL prompt or `source` is needed.
 
 ```sh
 install -d "$HOME/.config/systemd/user"
 cp deploy/systemd/foreman-web.service deploy/systemd/foreman-worker.service "$HOME/.config/systemd/user/"
 systemd-analyze --user verify "$HOME/.config/systemd/user/"foreman-*.service
 systemctl --user daemon-reload
-systemctl --user enable --now foreman-worker.service foreman-web.service
+mix foreman.deploy --env-file "$HOME/.config/foreman/runtime.env"
+# Continue only if deployment succeeded:
+systemctl --user enable foreman-worker.service foreman-web.service
 ```
+
+The bootstrap `current` above satisfies the deploy command's existing-release
+check. The command builds another release, migrates it, then switches and starts
+the services. A migration failure leaves `current` and service state untouched.
 
 Open `http://127.0.0.1:4747/settings`. Configure repositories using the TOML section
 below. A fresh installation has no repositories enabled.
@@ -195,12 +187,18 @@ mix foreman.deploy
 ```
 
 The command builds production code, assets and the release, copies it into a new
-UTC-timestamped directory under `~/.local/lib/foreman/releases`, stops worker and
-web, atomically switches the sibling `current` symlink, then starts web and worker.
+UTC-timestamped directory under `~/.local/lib/foreman/releases`, and runs pending
+migrations with that new release before stopping anything. It then stops worker
+and web, atomically switches the sibling `current` symlink, and starts web and worker.
 It runs `tools/release-smoke.py --release <new-directory>` against that installed
 release using a disposable database and ports, not the live database or port.
 On success it builds the CLI with `MIX_ENV=dev` and atomically installs it at
 `~/.local/bin/foreman`. The output includes the release ID and smoke result.
+
+A migration failure aborts deployment with the previous `current` and running
+services untouched. Migration stdout/stderr is captured and suppressed, even on
+failure, because database errors can contain credentials. The error names the
+migration phase; no secret values are printed. Applied migrations are not undone.
 
 A failed stop, link switch, start or smoke restores the previous `current` and
 starts both services again; the command exits nonzero. A CLI failure leaves the
@@ -215,10 +213,26 @@ use that `current` path. Mix may compile checkout tooling before the task runs.
 `--dry-run` then prints the plan without building a release, writing deployment
 paths, or controlling services; checkout guards still apply.
 
-This is an upgrade command, not initial provisioning. It requires an existing
-`current` release and never edits units, reads environment files, or migrates the
-live database. Back up Postgres and arrange any schema migrations separately
-before deployment; both releases must be compatible with the schema for rollback.
+Migrations load the ordered `EnvironmentFiles` reported by the installed web and
+worker units. Their database settings must agree. `--env-file PATH` overrides
+unit discovery with one file. Only `DATABASE_URL`, `ECTO_IPV6`, and `POOL_SIZE`
+reach the migration child; they are never installed in the deploy process's
+environment or passed to build, service-control, CLI or smoke commands. The child
+uses the worker role without a Phoenix server or web signing secret.
+
+Environment files accept single-line `KEY=VALUE` data, blank lines, comments,
+and single/double-quoted values; no shell expansion or execution occurs.
+Unsupported quoting, continuations, or escaped/space-containing discovery paths
+fail closed. Use a simple `--env-file` path for such custom units.
+Dry-run queries pending migration versions and names only when `--env-file` is
+explicitly supplied and `_build/prod/rel/foreman` already contains the new release.
+This query skips migration-table creation and migration locks. Without that
+release or permission to load credentials, or if the query fails, it reports
+`Pending migrations unavailable` instead of connecting with ambient credentials.
+
+The command requires an existing `current` release and never edits units.
+Back up Postgres before deployment. Migrations run while the old code is still
+serving: both releases must be compatible with the schema for deployment and rollback.
 Refresh changed unit templates separately, following the installation steps above.
 Concurrent deployments to the same releases directory are refused. After an
 interrupted process, inspect the services and `current` before manually removing
