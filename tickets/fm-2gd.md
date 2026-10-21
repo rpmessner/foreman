@@ -20,3 +20,6 @@ Two concurrent mix test runs in sibling worktrees collided on a shared temporary
 ## Acceptance
 - [ ] Two mix precommit runs started together in sibling worktrees both pass, three times in a row
 - [ ] No test depends on the caller setting TMPDIR
+
+## Notes
+- 2026-10-21 user: 2026-10-21: initiatives_live_test.exs failed 2 of 7 runs in the fm-parked worktree with no code change between runs (TMPDIR isolated), so the flake is not only shared temp dirs; include the LiveView signing/clock failure in this ticket's scope.
