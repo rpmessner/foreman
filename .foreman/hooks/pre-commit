@@ -2,3 +2,7 @@
 # BEGIN FOREMAN CHECK
 foreman check || exit $?
 # END FOREMAN CHECK
+# Cheap parts of `mix precommit` (the full test run stays in close-out).
+mix format --check-formatted || exit $?
+mix compile --warnings-as-errors || exit $?
+mix foreman.hygiene || exit $?
