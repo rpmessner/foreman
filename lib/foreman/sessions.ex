@@ -176,7 +176,7 @@ defmodule Foreman.Sessions do
 
   def target(key) do
     snapshot = Foreman.Initiatives.snapshot(%{"view" => ""})
-    orphan = Enum.find(snapshot.orphans, &(&1.key == key))
+    orphan = Enum.find(snapshot.orphans ++ snapshot.standalone, &(&1.key == key))
     epic = find_epic(snapshot.drafts ++ snapshot.epics, key)
 
     cond do

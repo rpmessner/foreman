@@ -75,6 +75,7 @@ defmodule Foreman.Initiatives do
           title: raw["title"],
           type: raw["issue_type"],
           status: raw["status"],
+          created_at: created_at(raw["created_at"] || raw["created"]),
           labels: raw["labels"] || [],
           stage: stage,
           spec_link: epic && epic.spec_link,
@@ -99,6 +100,21 @@ defmodule Foreman.Initiatives do
       |> Enum.map(fn link -> %{link | epic: Map.get(epic_aliases, link.epic, link.epic)} end)
 
     tree = Tree.build(beads, links)
+    activity = board_activity(keys, planning_sessions)
+
+    {standalone, unplanned} =
+      tree.orphans
+      |> Enum.reject(&(&1.status == "closed"))
+      |> Enum.sort_by(fn ticket ->
+        case ticket.created_at do
+          nil ->
+            {1, 0, Foreman.Beads.Id.sort_key(ticket.key)}
+
+          time ->
+            {0, -DateTime.to_unix(time, :microsecond), Foreman.Beads.Id.sort_key(ticket.key)}
+        end
+      end)
+      |> Enum.split_with(&(&1.stage != :queued or MapSet.member?(activity, &1.key)))
 
     drafts =
       epics
@@ -124,7 +140,8 @@ defmodule Foreman.Initiatives do
     %{
       drafts: drafts,
       epics: Enum.filter(tree.epics, &epic_matches?(&1, filters)),
-      orphans: Enum.filter(tree.orphans, &matches?(&1, filters)),
+      orphans: Enum.filter(unplanned, &matches?(&1, filters)),
+      standalone: Enum.filter(standalone, &matches?(&1, standalone_filters(filters))),
       repos: repos,
       columns: config["columns"],
       views: views,
@@ -132,6 +149,39 @@ defmodule Foreman.Initiatives do
       types: beads |> Enum.map(& &1.type) |> Enum.uniq() |> Enum.sort(),
       labels: beads |> Enum.flat_map(& &1.labels) |> Enum.uniq() |> Enum.sort()
     }
+  end
+
+  defp standalone_filters(%{"view" => "in-flight"} = filters),
+    do: Map.put(filters, "stages", [])
+
+  defp standalone_filters(filters), do: filters
+
+  defp board_activity(keys, planning_sessions) do
+    sessions =
+      Repo.all(
+        from s in "sessions",
+          where: s.repo_key in ^keys,
+          select: {s.repo_key, s.bead_id},
+          distinct: true
+      )
+
+    requests =
+      Repo.all(
+        from r in "approval_requests",
+          where: r.repo_key in ^keys,
+          select: {r.repo_key, r.bead_id},
+          distinct: true
+      )
+
+    stages =
+      Repo.all(
+        from e in "stage_events",
+          where: e.repo_key in ^keys and e.outcome == "row" and e.to_stage != "queued",
+          select: {e.repo_key, e.bead_id},
+          distinct: true
+      )
+
+    MapSet.new(sessions ++ requests ++ stages ++ Map.keys(planning_sessions))
   end
 
   def matches?(b, filters) do
@@ -173,6 +223,21 @@ defmodule Foreman.Initiatives do
       matches?(%{epic | stale: Enum.any?(epic.planned ++ epic.fallout, & &1.stale)}, filters) or
         Enum.any?(epic.planned ++ epic.fallout, &matches?(&1, filters)) or
         Enum.any?(epic.children, &epic_matches?(&1, filters))
+
+  defp created_at(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, time, _} ->
+        time
+
+      _ ->
+        case Date.from_iso8601(value) do
+          {:ok, date} -> DateTime.new!(date, ~T[00:00:00], "Etc/UTC")
+          _ -> nil
+        end
+    end
+  end
+
+  defp created_at(_), do: nil
 
   defp stage_atom(value),
     do:
