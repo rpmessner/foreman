@@ -7,17 +7,18 @@ stateDiagram-v2
     [*] --> ready
     ready --> building: begin / run(build)
     building --> installing: succeeded / run(install)
-    installing --> stopping: succeeded / run(stop)
+    installing --> migrating: succeeded / run(migrate)
+    migrating --> stopping: succeeded / run(stop)
     stopping --> switching: succeeded / run(switch)
     switching --> starting: succeeded / run(start)
     starting --> smoking: succeeded / run(smoke)
     smoking --> cli: succeeded / run(cli)
     cli --> done: succeeded
     rolling_back --> failed: succeeded
-    fsm_set_9 --> rolling_back: failed / run(rollback)
-    fsm_set_10 --> failed: failed
-    state "stopping, switching, starting, smoking" as fsm_set_9
-    state "building, installing, cli, rolling_back" as fsm_set_10
+    fsm_set_10 --> rolling_back: failed / run(rollback)
+    fsm_set_11 --> failed: failed
+    state "stopping, switching, starting, smoking" as fsm_set_10
+    state "building, installing, migrating, cli, rolling_back" as fsm_set_11
 ```
 
 | state | event | result | effects |
@@ -29,8 +30,11 @@ stateDiagram-v2
 | building | succeeded | -> installing | run(install) |
 | building | failed | -> failed |  |
 | installing | begin | invalid |  |
-| installing | succeeded | -> stopping | run(stop) |
+| installing | succeeded | -> migrating | run(migrate) |
 | installing | failed | -> failed |  |
+| migrating | begin | invalid |  |
+| migrating | succeeded | -> stopping | run(stop) |
+| migrating | failed | -> failed |  |
 | stopping | begin | invalid |  |
 | stopping | succeeded | -> switching | run(switch) |
 | stopping | failed | -> rolling_back | run(rollback) |

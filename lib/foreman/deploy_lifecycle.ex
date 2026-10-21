@@ -6,6 +6,7 @@ defmodule Foreman.DeployLifecycle do
   state(:ready)
   state(:building)
   state(:installing)
+  state(:migrating)
   state(:stopping)
   state(:switching)
   state(:starting)
@@ -22,7 +23,8 @@ defmodule Foreman.DeployLifecycle do
 
   transition(:begin, from: :ready, to: :building, do: [run: :build])
   transition(:succeeded, from: :building, to: :installing, do: [run: :install])
-  transition(:succeeded, from: :installing, to: :stopping, do: [run: :stop])
+  transition(:succeeded, from: :installing, to: :migrating, do: [run: :migrate])
+  transition(:succeeded, from: :migrating, to: :stopping, do: [run: :stop])
   transition(:succeeded, from: :stopping, to: :switching, do: [run: :switch])
   transition(:succeeded, from: :switching, to: :starting, do: [run: :start])
   transition(:succeeded, from: :starting, to: :smoking, do: [run: :smoke])
@@ -36,6 +38,10 @@ defmodule Foreman.DeployLifecycle do
     do: [run: :rollback]
   )
 
-  transition(:failed, from: [:building, :installing, :cli, :rolling_back], to: :failed)
+  transition(:failed,
+    from: [:building, :installing, :migrating, :cli, :rolling_back],
+    to: :failed
+  )
+
   invalid([:begin, :succeeded, :failed], from: :any)
 end
