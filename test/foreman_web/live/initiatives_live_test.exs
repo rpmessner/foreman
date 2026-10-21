@@ -42,6 +42,165 @@ defmodule ForemanWeb.InitiativesLiveTest do
     :ok
   end
 
+  test "parentless tickets with board activity are standalone, including ended sessions and requests",
+       %{conn: conn} do
+    rows =
+      Enum.map(~w(untouched staged session requested), fn id ->
+        b(id, "task", [], if(id == "untouched", do: "in_progress", else: "open"))
+      end)
+
+    Foreman.Beads.Projection.replace("sample", Enum.map_join(rows, "\n", &Jason.encode!/1))
+    Foreman.Overlay.apply_event({"sample", "staged"}, {:dispatch, %{window: "test"}})
+    now = DateTime.utc_now()
+
+    Foreman.Repo.insert_all("sessions", [
+      %{
+        repo_key: "sample",
+        bead_id: "session",
+        window: "old",
+        started_at: now,
+        last_seen_at: now,
+        ended_at: now
+      }
+    ])
+
+    Foreman.Repo.insert!(%Foreman.Requests.Request{
+      repo_key: "sample",
+      bead_id: "requested",
+      kind: "decision",
+      actor: "pi",
+      state: "answered",
+      facts: %{},
+      outcome: %{}
+    })
+
+    snapshot = Foreman.Initiatives.snapshot(%{"view" => ""})
+    assert Enum.map(snapshot.orphans, & &1.id) == ["untouched"]
+    assert Enum.map(snapshot.standalone, & &1.id) |> Enum.sort() == ~w(requested session staged)
+    {:ok, view, _} = live(conn, "/?view=")
+    assert has_element?(view, "#standalone-panel", "Standalone work")
+    view |> element("#toggle-standalone") |> render_click()
+    view |> element("#toggle-standalone-project-sample") |> render_click()
+    assert ids(view, "#standalone [data-bead]") |> Enum.sort() == ~w(requested session staged)
+    view |> element("#toggle-unplanned") |> render_click()
+    view |> element("#toggle-project-sample") |> render_click()
+    assert ids(view, "#unplanned [data-bead]") == ["untouched"]
+  end
+
+  test "In flight includes standalone work waiting on a request before dispatch", %{conn: conn} do
+    Foreman.Repo.insert!(%Foreman.Requests.Request{
+      repo_key: "sample",
+      bead_id: "o",
+      kind: "decision",
+      actor: "pi",
+      state: "answered",
+      facts: %{},
+      outcome: %{}
+    })
+
+    assert [%{id: "o"}] = Foreman.Initiatives.snapshot(%{"view" => "in-flight"}).standalone
+    {:ok, view, _} = live(conn, "/?view=in-flight")
+    view |> element("#toggle-standalone") |> render_click()
+    view |> element("#toggle-standalone-project-sample") |> render_click()
+    assert has_element?(view, "#standalone [data-bead=o]")
+
+    assert Foreman.Initiatives.snapshot(%{"view" => "in-flight", "q" => "absent"}).standalone ==
+             []
+  end
+
+  test "ended planning conversations keep parentless work out of Unplanned", %{conn: conn} do
+    Foreman.Repo.insert!(%Foreman.PlanningSession{
+      project: "sample",
+      ticket: "o",
+      state: :ended,
+      workdir: System.tmp_dir!(),
+      launched_at: DateTime.utc_now()
+    })
+
+    snapshot = Foreman.Initiatives.snapshot(%{"view" => ""})
+    assert snapshot.orphans == []
+    assert [%{id: "o"}] = snapshot.standalone
+    assert %{key: {"sample", "o"}} = Foreman.Sessions.target({"sample", "o"})
+    {:ok, view, _} = live(conn, "/?view=")
+    view |> element("#toggle-standalone") |> render_click()
+    view |> element("#toggle-standalone-project-sample") |> render_click()
+    assert has_element?(view, "#standalone [data-bead=o]")
+  end
+
+  test "planned tickets show their creation age when the epic expands", %{conn: conn} do
+    rows = [
+      b("e", "epic"),
+      Map.put(
+        b("child", "task", [%{depends_on_id: "e", type: "parent-child"}]),
+        :created_at,
+        "2020-01-01T00:00:00Z"
+      )
+    ]
+
+    assert {:ok, _} =
+             Foreman.Beads.Projection.replace(
+               "sample",
+               Enum.map_join(rows, "\n", &Jason.encode!/1)
+             )
+
+    {:ok, view, _} = live(conn, "/?view=")
+    view |> element("#epics [data-bead=e] button[phx-click=toggle]") |> render_click()
+
+    assert has_element?(
+             view,
+             "#epics [data-bead=child] time[datetime='2020-01-01T00:00:00Z'][title='2020-01-01T00:00:00Z']"
+           )
+
+    assert Foreman.Initiatives.snapshot(%{"view" => ""}).orphans == []
+  end
+
+  test "past stage activity stays standalone after revival without a session", %{conn: conn} do
+    Foreman.Overlay.apply_event({"sample", "o"}, :abandon)
+    Foreman.Overlay.apply_event({"sample", "o"}, :revive)
+    snapshot = Foreman.Initiatives.snapshot(%{"view" => ""})
+    assert snapshot.orphans == []
+    assert [%{id: "o", stage: :queued}] = snapshot.standalone
+    assert %{key: {"sample", "o"}} = Foreman.Sessions.target({"sample", "o"})
+    {:ok, view, _} = live(conn, "/?view=")
+    view |> element("#toggle-standalone") |> render_click()
+    view |> element("#toggle-standalone-project-sample") |> render_click()
+    assert has_element?(view, "#standalone [data-bead=o]")
+  end
+
+  test "Unplanned is newest first with unknown dates last and shared human ages", %{conn: conn} do
+    recent = DateTime.utc_now() |> DateTime.add(-172_800, :second) |> DateTime.truncate(:second)
+
+    rows = [
+      Map.put(b("a-old", "task"), :created, "2020-01-01"),
+      Map.put(b("z-new", "task"), :created_at, DateTime.to_iso8601(recent)),
+      Map.put(b("bad", "task"), :created, "invalid"),
+      b("missing", "task")
+    ]
+
+    assert {:ok, _} =
+             Foreman.Beads.Projection.replace(
+               "sample",
+               Enum.map_join(rows, "\n", &Jason.encode!/1)
+             )
+
+    snapshot = Foreman.Initiatives.snapshot(%{"view" => ""})
+    assert Enum.map(snapshot.orphans, & &1.id) == ~w(z-new a-old bad missing)
+    assert Enum.find(snapshot.orphans, &(&1.id == "a-old")).created_at == ~U[2020-01-01 00:00:00Z]
+    {:ok, view, _} = live(conn, "/?view=")
+    view |> element("#toggle-unplanned") |> render_click()
+    view |> element("#toggle-project-sample") |> render_click()
+    assert ids(view, "#unplanned [data-bead]") == ~w(z-new a-old bad missing)
+
+    assert has_element?(
+             view,
+             "#unplanned [data-bead=z-new] time[datetime='#{DateTime.to_iso8601(recent)}'][title='#{DateTime.to_iso8601(recent)}']",
+             "2 d ago"
+           )
+
+    refute has_element?(view, "#unplanned [data-bead=bad] time")
+    refute has_element?(view, "#unplanned [data-bead=missing] time")
+  end
+
   test "the global coordinator offers state, focus, resume and a separate fresh start", %{
     conn: conn
   } do
@@ -555,7 +714,7 @@ defmodule ForemanWeb.InitiativesLiveTest do
     {:ok, view, _} = live(conn, "/?view=all")
     assert has_element?(view, "#toggle-done[aria-expanded=false]")
     assert has_element?(view, "#done-count", "3")
-    assert has_element?(view, "#epics-panel + #done-panel + #unplanned-panel")
+    assert has_element?(view, "#epics-panel + #done-panel + #standalone-panel + #unplanned-panel")
     assert ids(view, "#epics [data-kind=epic]") == ["e", "shipping", "ticketed"]
     refute has_element?(view, "[data-bead='done.2']")
     refute has_element?(view, "[data-bead=shipped]")
