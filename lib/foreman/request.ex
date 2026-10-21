@@ -6,6 +6,7 @@ defmodule Foreman.Request do
   state(:pending)
   state(:approved)
   state(:answered)
+  state(:not_picked_up)
   state(:declined)
   state(:withdrawn)
   state(:superseded)
@@ -15,6 +16,9 @@ defmodule Foreman.Request do
   event(:ask)
   event(:approve)
   event(:answer)
+  event(:wait)
+  event(:pickup)
+  event(:wait_lost, source: :observed)
   event(:decline)
   event(:withdraw)
   event(:continue)
@@ -26,12 +30,34 @@ defmodule Foreman.Request do
   event(:orphaned, source: :observed)
   effects([:record, :notify, :enqueue, :audit, :send])
   guard(:decision?)
+  guard(:unheld_decision?)
+  guard(:uncollected?)
+  guard(:unpicked?)
   guard(:action?)
   guard(:usage_limit?)
   guard(:inline_question?)
   guard(:chat_question?)
   transition(:ask, from: :new, to: :pending, do: [record: :request, notify: :pending])
   transition(:approve, from: :pending, to: :approved, guard: :action?, do: [enqueue: :job])
+
+  transition(:wait, from: :pending, to: :pending, do: [record: :wait])
+  transition(:pickup, from: :not_picked_up, to: :answered, do: [record: :pickup])
+  transition(:pickup, from: :answered, to: :answered, guard: :unpicked?, do: [record: :pickup])
+  ignore(:pickup, from: :answered)
+
+  transition(:wait_lost,
+    from: :answered,
+    to: :not_picked_up,
+    guard: :uncollected?,
+    do: [notify: :coordinator]
+  )
+
+  transition(:answer,
+    from: :pending,
+    to: :not_picked_up,
+    guard: :unheld_decision?,
+    do: [record: :answer, notify: :coordinator]
+  )
 
   transition(:answer,
     from: :pending,
@@ -50,8 +76,20 @@ defmodule Foreman.Request do
   transition(:succeeded, from: :executing, to: :done, do: [audit: :result, notify: :asker])
   transition(:failed, from: :executing, to: :failed, do: [audit: :reason, notify: :asker])
   transition(:orphaned, from: :executing, to: :failed, do: [audit: :unknown, notify: :asker])
-  ignore([:facts_changed, :succeeded, :failed, :orphaned], from: :any)
-  invalid([:ask, :approve, :answer, :decline, :withdraw, :start, :continue, :reply], from: :any)
+  ignore([:facts_changed, :succeeded, :failed, :orphaned, :wait_lost], from: :any)
+
+  invalid(
+    [:ask, :approve, :answer, :decline, :withdraw, :start, :continue, :reply, :wait, :pickup],
+    from: :any
+  )
+
+  def unpicked?(context, _), do: not Map.get(context, :picked_up, false)
+
+  def unheld_decision?(%{kind: "decision", live_wait: false}, _), do: true
+  def unheld_decision?(_, _), do: false
+
+  def uncollected?(%{kind: "decision", live_wait: false, picked_up: false}, _), do: true
+  def uncollected?(_, _), do: false
 
   def usage_limit?(%{kind: "session_waiting", reason: "usage_limit"}, _), do: true
   def usage_limit?(_, _), do: false

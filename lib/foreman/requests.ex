@@ -125,6 +125,130 @@ defmodule Foreman.Requests do
     :ok
   end
 
+  @doc "Renew a bounded poll lease or atomically collect an answer under the answer lock."
+  def wait(id, lease_ms, waiter \\ "legacy") when is_integer(lease_ms) and lease_ms >= 0 do
+    transaction(fn ->
+      case get(id) do
+        nil ->
+          {:error, :not_found}
+
+        request ->
+          lock(request.repo_key)
+          request = get(id)
+
+          case request.state do
+            "pending" ->
+              until = DateTime.add(DateTime.utc_now(), min(lease_ms, 2000), :millisecond)
+
+              transition(request, :wait, %{
+                "until" => DateTime.to_iso8601(until),
+                "waiter" => waiter
+              })
+
+            state when state in ["answered", "not_picked_up"] ->
+              transition(request, :pickup, %{})
+
+            _ ->
+              {:ok, request}
+          end
+      end
+    end)
+  end
+
+  @doc "A poll lease is live only while its asking session has not stopped."
+  def live_wait?(request, now \\ DateTime.utc_now()) do
+    uuid = Ecto.UUID.dump!(request.id)
+
+    waits =
+      Repo.all(
+        from e in "request_events",
+          where: e.request_id == ^uuid and e.event == "wait",
+          distinct: fragment("?->>'waiter'", e.payload),
+          order_by: [desc: e.id],
+          select: e.payload
+      )
+
+    Enum.any?(waits, fn payload ->
+      case DateTime.from_iso8601(payload["until"]) do
+        {:ok, deadline, _} -> DateTime.compare(deadline, now) == :gt
+        _ -> false
+      end
+    end) and not session_stopped?(request)
+  end
+
+  defp picked_up?(request), do: not is_nil(last_event(request, "pickup"))
+
+  defp last_event(request, event) do
+    uuid = Ecto.UUID.dump!(request.id)
+
+    Repo.one(
+      from e in "request_events",
+        where: e.request_id == ^uuid and e.event == ^event,
+        order_by: [desc: e.id],
+        limit: 1,
+        select: e.payload
+    )
+  end
+
+  defp session_stopped?(%{session: nil}), do: false
+
+  defp session_stopped?(request) do
+    repo = request.repo_key
+    ticket = request.bead_id
+    session = request.session
+
+    Repo.exists?(
+      from e in "stage_events",
+        where:
+          e.repo_key == ^repo and e.bead_id == ^ticket and e.event == "report" and
+            e.outcome != "invalid" and e.to_stage == "reported" and
+            fragment("?->>'window'", e.payload) == ^session
+    ) or
+      Repo.exists?(
+        from s in "sessions",
+          where:
+            s.repo_key == ^repo and s.bead_id == ^ticket and s.window == ^session and
+              not is_nil(s.ended_at)
+      ) or
+      Repo.exists?(
+        from s in Foreman.PlanningSession,
+          where:
+            s.project == ^repo and s.ticket == ^ticket and
+              (s.window == ^session or fragment("?::text", s.session_id) == ^session) and
+              s.state in [:ended, :parked]
+      )
+  end
+
+  @doc "Runtime reconciliation drives lease expiry through the declared guarded row."
+  def reconcile_pickups do
+    Repo.all(
+      from r in Request,
+        as: :request,
+        where: r.kind == "decision" and r.state == "answered",
+        where:
+          exists(
+            from e in "request_events",
+              where: e.request_id == parent_as(:request).id and e.event == "wait",
+              select: 1
+          ),
+        where:
+          not exists(
+            from e in "request_events",
+              where: e.request_id == parent_as(:request).id and e.event == "pickup",
+              select: 1
+          )
+    )
+    |> Enum.each(&resolve(&1.id, :wait_lost, %{}))
+
+    :ok
+  end
+
+  def not_picked_up,
+    do:
+      Repo.all(
+        from r in Request, where: r.state == "not_picked_up", order_by: [r.updated_at, r.id]
+      )
+
   def pending_count, do: Repo.aggregate(from(r in Request, where: r.state == "pending"), :count)
 
   def pending,
@@ -134,7 +258,7 @@ defmodule Foreman.Requests do
     do:
       Repo.all(
         from r in Request,
-          where: r.state not in ["pending", "approved", "executing"],
+          where: r.state not in ["pending", "approved", "executing", "not_picked_up"],
           order_by: [desc: r.updated_at, desc: r.id],
           limit: 50
       )
@@ -291,12 +415,13 @@ defmodule Foreman.Requests do
 
     with :ok <- validate(event, payload),
          {next, effects} when next != :error <- Machine.step(state, event, context(request)) do
-      if next == state do
+      if next == state and effects == [] do
         {:ok, request}
       else
         outcome =
           case event do
             :answer -> Map.take(payload, ["answer"])
+            event when event in [:wait, :pickup, :wait_lost] -> request.outcome
             :orphaned -> %{"reason" => "outcome unknown"}
             _ -> Map.take(payload, ["reason", "result"])
           end
@@ -333,7 +458,9 @@ defmodule Foreman.Requests do
     do: %{
       kind: request.kind,
       reason: request.facts["reason"],
-      questions: request.facts["questions"]
+      questions: request.facts["questions"],
+      live_wait: live_wait?(request),
+      picked_up: picked_up?(request)
     }
 
   defp validate(:answer, payload) do

@@ -10,9 +10,11 @@ defmodule ForemanWeb.RequestCard do
     ~H"""
     <article id={@id} class="space-y-2 rounded-lg border border-base p-4">
       <div class="flex flex-wrap items-center gap-2 text-xs text-foreground-softer">
-        <Badge.badge>{@request.state}</Badge.badge>
+        <Badge.badge>
+          {if @request.state == "not_picked_up", do: "Answer not picked up", else: @request.state}
+        </Badge.badge>
         <.ticket_link id={@id <> "-ticket-link"} request={@request} link={@link} />
-        <span>{@request.actor}</span>
+        <span>{@request.actor}<span :if={@request.session}> · {@request.session}</span></span>
         <span class="ml-auto"><ForemanWeb.TicketDetail.timestamp at={@request.updated_at} /></span>
       </div>
       <.waiting_facts :if={@request.kind == "session_waiting"} request={@request} />

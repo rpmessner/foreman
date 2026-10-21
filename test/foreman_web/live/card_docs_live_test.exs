@@ -245,6 +245,7 @@ defmodule ForemanWeb.CardDocsLiveTest do
   test "recent outcomes render the question as Markdown and link the ticket", %{conn: conn} do
     request = decision(%{"question" => "Pick one:\n\n- A\n- B", "docs" => ["docs/spec.md"]})
     {:ok, _} = Requests.resolve(request.id, :answer, %{"answer" => "A"})
+    Requests.wait(request.id, 0)
 
     {:ok, view, _} = live(conn, "/needs-you")
     card = "#recent-#{request.id}"

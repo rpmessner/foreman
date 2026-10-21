@@ -18,6 +18,20 @@ defmodule ForemanWeb.RequestDrawerTest do
     %{request: request}
   end
 
+  test "the count drawer retains uncollected answers until pickup", %{
+    conn: conn,
+    request: request
+  } do
+    Requests.resolve(request.id, :answer, %{"answer" => "Compact"})
+    {:ok, view, _} = live(conn, "/settings")
+    assert has_element?(view, "#needs-you-count", "1")
+    render_click(view, "open-request-drawer")
+    assert has_element?(view, "#drawer-uncollected-#{request.id}", "Compact")
+    Requests.wait(request.id, 0)
+    send(view.pid, :request_count_tick)
+    refute has_element?(view, "#drawer-uncollected-#{request.id}")
+  end
+
   test "drawer answer uses the page resolution and stale page decline cannot overwrite it", %{
     conn: conn,
     request: request
@@ -25,6 +39,7 @@ defmodule ForemanWeb.RequestDrawerTest do
     {:ok, page, _} = live(conn, "/needs-you")
     {:ok, drawer, _} = live(conn, "/settings")
     render_click(drawer, "open-request-drawer")
+    Requests.wait(request.id, 2000)
 
     drawer
     |> form("#drawer-decision-#{request.id}",

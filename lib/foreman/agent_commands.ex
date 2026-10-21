@@ -65,10 +65,16 @@ defmodule Foreman.AgentCommands do
     end
   end
 
-  defp command(%{"action" => "wait", "id" => id}) do
-    case Foreman.Requests.get(id) do
-      nil -> {404, %{error: "not_found"}}
-      request -> {200, request |> Jason.encode!() |> Jason.decode!()}
+  defp command(%{"action" => "wait", "id" => id} = params) do
+    lease = params["lease_ms"] || 2000
+
+    if is_integer(lease) and lease >= 0 do
+      case Foreman.Requests.wait(id, lease, params["request_id"] || "legacy") do
+        {:error, :not_found} -> {404, %{error: "not_found"}}
+        {:ok, request} -> {200, request |> Jason.encode!() |> Jason.decode!()}
+      end
+    else
+      {422, %{error: "invalid_lease"}}
     end
   end
 

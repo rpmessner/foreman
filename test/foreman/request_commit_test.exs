@@ -44,13 +44,46 @@ defmodule Foreman.RequestCommitTest do
     assert Enum.count(results, &match?({:error, :invalid}, &1)) == 1
 
     unboxed(fn ->
-      assert Requests.get(request.id).state in ["answered", "declined"]
+      assert Requests.get(request.id).state in ["not_picked_up", "declined"]
 
       assert %{rows: [[2]]} =
                Repo.query!("SELECT count(*) FROM request_events WHERE request_id=$1", [
                  Ecto.UUID.dump!(request.id)
                ])
     end)
+  end
+
+  test "answer and wait arriving together serialize without losing the answer", %{key: key} do
+    for _ <- 1..10 do
+      {:ok, request} =
+        unboxed(fn -> Requests.ask(key, "decision", %{"facts" => %{"question" => "Which?"}}) end)
+
+      results =
+        race([
+          fn -> Requests.resolve(request.id, :answer, %{"answer" => "A"}) end,
+          fn -> Requests.wait(request.id, 2000) end
+        ])
+
+      assert Enum.all?(results, &match?({:ok, _}, &1))
+
+      unboxed(fn ->
+        assert Requests.get(request.id).state == "answered"
+
+        assert {:ok, %{state: "answered", outcome: %{"answer" => "A"}}} =
+                 Requests.wait(request.id, 0)
+
+        Requests.reconcile_pickups()
+        assert Requests.get(request.id).state == "answered"
+
+        assert %{rows: [[count]]} =
+                 Repo.query!(
+                   "SELECT count(*) FROM request_events WHERE request_id=$1 AND to_state='not_picked_up'",
+                   [Ecto.UUID.dump!(request.id)]
+                 )
+
+        assert count in [0, 1]
+      end)
+    end
   end
 
   for kind <- ["push", "open_pr"] do

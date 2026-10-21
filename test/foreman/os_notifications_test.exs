@@ -63,6 +63,28 @@ defmodule Foreman.OsNotificationsTest do
     refute_receive {:ran, _, _}, 50
   end
 
+  test "one answer-not-picked-up notification names the asking session and ticket" do
+    pid = start()
+
+    {:ok, request} =
+      Requests.ask({"sample", "s-1"}, "decision", %{
+        "session" => "build-7",
+        "facts" => %{"question" => "Which?"}
+      })
+
+    changed(pid, request.id)
+    assert_receive {:ran, _, _}
+    Requests.resolve(request.id, :answer, %{"answer" => "Compact"})
+    changed(pid, request.id)
+    assert_receive {:ran, "osascript", args}
+    assert Enum.take(args, -2) == ["Answer not picked up · s-1", "build-7 · Compact"]
+    changed(pid, request.id)
+    refute_receive {:ran, _, _}, 50
+    Requests.wait(request.id, 0)
+    changed(pid, request.id)
+    refute_receive {:ran, _, _}, 50
+  end
+
   test "the periodic scan catches a request whose event was missed" do
     pid = start()
     _request = ask("Missed?")

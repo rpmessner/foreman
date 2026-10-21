@@ -28,7 +28,7 @@ defmodule ForemanWeb.RequestCount do
 
   def refresh(socket) do
     pending = Foreman.Requests.pending()
-    count = length(pending)
+    count = length(pending) + length(Foreman.Requests.not_picked_up())
 
     socket
     |> assign(
@@ -42,7 +42,18 @@ defmodule ForemanWeb.RequestCount do
   defp notification_requests(pending) do
     Enum.map(pending, fn request ->
       %{id: request.id, kind: request.kind, ticket: request.bead_id}
-    end)
+    end) ++
+      Enum.map(Foreman.Requests.not_picked_up(), fn request ->
+        {title, body} = Foreman.OsNotifications.message(request)
+
+        %{
+          id: request.id <> ":answer",
+          kind: request.kind,
+          ticket: request.bead_id,
+          title: title,
+          body: body
+        }
+      end)
   end
 
   defp handle_info(:request_count_tick, socket) do

@@ -58,6 +58,7 @@ defmodule Foreman.Runtime do
   def handle_info(_, state), do: {:noreply, state}
 
   defp reconcile(state, requested \\ :all) do
+    Foreman.Requests.reconcile_pickups()
     Foreman.Requests.reconcile_pushes()
     Foreman.Requests.reconcile_open_prs()
     Foreman.Requests.reconcile_merges()
