@@ -186,25 +186,43 @@ recovery after boot failures. Database connections also reconnect after outages.
 
 ### Update the release
 
-Build a new release and copy it into a new timestamped directory using the build
-commands above, but do not repeat the initial `ln -s`. Never overwrite the release
-files a running service uses. Back up Postgres before schema changes.
+From a clean `main` checkout, with the same build credentials used for the initial
+install:
 
 ```sh
-systemctl --user stop foreman-worker.service foreman-web.service
-ln -s "releases/$release_id" "$HOME/.local/lib/foreman/current.next"
-mv -Tf "$HOME/.local/lib/foreman/current.next" "$HOME/.local/lib/foreman/current"
+mix foreman.deploy --dry-run
+mix foreman.deploy
 ```
 
-Run the migration command above against the new `current`. If it fails, leave
-both services stopped and investigate. Restore an older release only if its code
-is compatible with the database schema. Refresh the unit templates if changed:
+The command builds production code, assets and the release, copies it into a new
+UTC-timestamped directory under `~/.local/lib/foreman/releases`, stops worker and
+web, atomically switches the sibling `current` symlink, then starts web and worker.
+It runs `tools/release-smoke.py --release <new-directory>` against that installed
+release using a disposable database and ports, not the live database or port.
+On success it builds the CLI with `MIX_ENV=dev` and atomically installs it at
+`~/.local/bin/foreman`. The output includes the release ID and smoke result.
 
-```sh
-cp deploy/systemd/foreman-web.service deploy/systemd/foreman-worker.service "$HOME/.config/systemd/user/"
-systemctl --user daemon-reload
-systemctl --user start foreman-worker.service foreman-web.service
-```
+A failed stop, link switch, start or smoke restores the previous `current` and
+starts both services again; the command exits nonzero. A CLI failure leaves the
+successfully smoked release current and exits nonzero; rerunning is safe. Old
+releases are retained. The tmux service is never controlled, including rollback.
+The smoke checks the package, not the health of the host's running services.
+
+`--allow-dirty` and `--allow-non-main` explicitly override the checkout guards.
+`--releases-dir`, `--web-unit`, `--worker-unit`, and `--cli-path` override today's
+defaults; `current` is always beside the releases directory. Custom units must
+use that `current` path. Mix may compile checkout tooling before the task runs.
+`--dry-run` then prints the plan without building a release, writing deployment
+paths, or controlling services; checkout guards still apply.
+
+This is an upgrade command, not initial provisioning. It requires an existing
+`current` release and never edits units, reads environment files, or migrates the
+live database. Back up Postgres and arrange any schema migrations separately
+before deployment; both releases must be compatible with the schema for rollback.
+Refresh changed unit templates separately, following the installation steps above.
+Concurrent deployments to the same releases directory are refused. After an
+interrupted process, inspect the services and `current` before manually removing
+`releases/.deploy-lock`; do not clear a lock held by another deploy.
 
 Use `systemctl --user restart foreman-worker foreman-web` after changing
 environment files. TOML edits hot-reload without a restart. Stop uses SIGTERM on

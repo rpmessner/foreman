@@ -26,6 +26,7 @@ defmodule Foreman.FsmDocsTest do
 
   for {name, module} <- [
         {"stage", Foreman.Stage},
+        {"deploy_lifecycle", Foreman.DeployLifecycle},
         {"request", Foreman.Request},
         {"request_wait", Foreman.RequestWait},
         {"notification_permission", Foreman.NotificationPermission},
