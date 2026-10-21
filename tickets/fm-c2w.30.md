@@ -2,7 +2,7 @@
 id: fm-c2w.30
 title: "Port: ticket priority on the board, overrides and Jump to front"
 type: feature
-status: open
+status: in_progress
 priority: 2
 parent: fm-c2w
 blocked_by: []
