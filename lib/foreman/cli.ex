@@ -143,6 +143,8 @@ defmodule Foreman.CLI do
   end
 
   defp wait(request, opts, deadline) do
+    remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+    request = Map.put(request, "lease_ms", min(remaining, 2000))
     {_, body} = Foreman.CLITransport.deliver(request, opts)
 
     case Foreman.RequestWait.step(:waiting, {:response, body}, %{}) do

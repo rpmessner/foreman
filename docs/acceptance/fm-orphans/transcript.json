@@ -1,0 +1,62 @@
+{
+  "ticket": "orphan-1792560556393",
+  "preview": {
+    "app": "foreman",
+    "branch": "fm-orphans",
+    "database": "foreman_preview_fm_orphans_ab5e33565422",
+    "missing": false,
+    "owner": "fm-orphans",
+    "port": 4880,
+    "state": "running",
+    "unit": "devserve-foreman-fm_orphans-ab5e33565422.service",
+    "url": "http://127.0.0.1:4880",
+    "worktree": "<checkout>/fm-orphans"
+  },
+  "steps": [
+    {
+      "command": [
+        "ask"
+      ],
+      "output": "Compiling 2 files (.ex)\nGenerated foreman app\n{\"id\":\"69730e4c-203f-4d27-b660-a27f5c83b736\"}"
+    },
+    {
+      "command": [
+        "timeout",
+        "69730e4c-203f-4d27-b660-a27f5c83b736"
+      ],
+      "output": "{\"id\":\"69730e4c-203f-4d27-b660-a27f5c83b736\",\"repo_key\":\"orphans-preview\",\"bead_id\":\"orphan-1792560556393\",\"kind\":\"decision\",\"actor\":\"pi\",\"session\":\"fm-orphans-preview\",\"facts\":{\"options\":[\"Wide\",\"Compact\"],\"question\":\"Which layout should the build use?\"},\"state\":\"pending\",\"outcome\":{},\"note\":null,\"inserted_at\":\"2026-10-21T05:29:18.966619Z\",\"updated_at\":\"2026-10-21T05:29:18.966619Z\"}"
+    },
+    {
+      "command": [
+        "report"
+      ],
+      "output": "reported"
+    },
+    {
+      "command": [
+        "wait",
+        "69730e4c-203f-4d27-b660-a27f5c83b736"
+      ],
+      "output": "{\"id\":\"69730e4c-203f-4d27-b660-a27f5c83b736\",\"repo_key\":\"orphans-preview\",\"bead_id\":\"orphan-1792560556393\",\"kind\":\"decision\",\"actor\":\"pi\",\"session\":\"fm-orphans-preview\",\"facts\":{\"options\":[\"Wide\",\"Compact\"],\"question\":\"Which layout should the build use?\"},\"state\":\"answered\",\"outcome\":{\"answer\":\"Compact\"},\"note\":\"Keep the shortcuts.\",\"inserted_at\":\"2026-10-21T05:29:18.966619Z\",\"updated_at\":\"2026-10-21T05:29:20.207617Z\"}"
+    }
+  ],
+  "notifications": [
+    {
+      "title": "Decision · fm-t46",
+      "body": "",
+      "tag": "foreman-request-8be1ac4b-6e1a-4f86-8ea9-4b13e6b1677a"
+    },
+    {
+      "title": "Answer not picked up · orphan-1792560556393",
+      "body": "fm-orphans-preview · Compact",
+      "tag": "foreman-request-69730e4c-203f-4d27-b660-a27f5c83b736:answer"
+    },
+    {
+      "title": "Decision · orphan-1792560556393",
+      "body": "",
+      "tag": "foreman-request-69730e4c-203f-4d27-b660-a27f5c83b736"
+    }
+  ],
+  "apiStatus": 401,
+  "result": "PASS: timeout, report, browser answer, one notification, later pickup clears section"
+}

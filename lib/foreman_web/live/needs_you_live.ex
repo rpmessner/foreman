@@ -10,6 +10,7 @@ defmodule ForemanWeb.NeedsYouLive do
      socket
      |> assign(:pending_ids, MapSet.new())
      |> assign(panel: Foreman.CardPanel.__fsm__(:initial), panel_doc: nil, card_repos: [])
+     |> stream_configure(:uncollected, dom_id: &("uncollected-" <> &1.id))
      |> stream_configure(:pending, dom_id: &("request-" <> &1.id))
      |> stream(:pending, [])
      |> refresh()}
@@ -180,6 +181,8 @@ defmodule ForemanWeb.NeedsYouLive do
     socket
     |> assign(:pending_ids, ids)
     |> ForemanWeb.RequestCount.refresh()
+    |> assign(:uncollected_count, length(Requests.not_picked_up()))
+    |> stream(:uncollected, Requests.not_picked_up(), reset: true)
     |> stream(:recent, Requests.recent(), reset: true)
   end
 
@@ -227,6 +230,21 @@ defmodule ForemanWeb.NeedsYouLive do
                 repos={@card_repos}
               />
             </div>
+            <section
+              id="not-picked-up"
+              class={[@uncollected_count == 0 && "hidden", "max-w-3xl space-y-3"]}
+            >
+              <h2 id="not-picked-up-heading" class="text-base font-semibold">Answer not picked up</h2>
+              <div id="uncollected-requests" phx-update="stream" class="space-y-3">
+                <ForemanWeb.RequestCard.summary
+                  :for={{id, request} <- @streams.uncollected}
+                  id={id}
+                  request={request}
+                  repos={@card_repos}
+                  link={:patch}
+                />
+              </div>
+            </section>
             <details id="recent-outcomes" class="max-w-3xl border-t border-base pt-4">
               <summary class="cursor-pointer text-sm font-medium text-foreground-softer">
                 Recent outcomes

@@ -7,6 +7,11 @@ stateDiagram-v2
     [*] --> new
     new --> pending: ask / record(request), notify(pending)
     pending --> approved: approve [action?] / enqueue(job)
+    pending --> pending: wait / record(wait)
+    not_picked_up --> answered: pickup / record(pickup)
+    answered --> answered: pickup [unpicked?] / record(pickup)
+    answered --> not_picked_up: wait_lost [uncollected?] / notify(coordinator)
+    pending --> not_picked_up: answer [unheld_decision?] / record(answer), notify(coordinator)
     pending --> answered: answer [decision?] / record(answer), notify(asker)
     pending --> declined: decline / record(note), notify(asker)
     pending --> withdrawn: withdraw
@@ -25,6 +30,9 @@ stateDiagram-v2
 | new | ask | -> pending | record(request), notify(pending) |
 | new | approve | invalid |  |
 | new | answer | invalid |  |
+| new | wait | invalid |  |
+| new | pickup | invalid |  |
+| new | wait_lost | ignored |  |
 | new | decline | invalid |  |
 | new | withdraw | invalid |  |
 | new | continue | invalid |  |
@@ -37,8 +45,12 @@ stateDiagram-v2
 | pending | ask | invalid |  |
 | pending | approve [action?] | -> approved | enqueue(job) |
 | pending | approve | invalid |  |
+| pending | answer [unheld_decision?] | -> not_picked_up | record(answer), notify(coordinator) |
 | pending | answer [decision?] | -> answered | record(answer), notify(asker) |
 | pending | answer | invalid |  |
+| pending | wait | -> pending | record(wait) |
+| pending | pickup | invalid |  |
+| pending | wait_lost | ignored |  |
 | pending | decline | -> declined | record(note), notify(asker) |
 | pending | withdraw | -> withdrawn |  |
 | pending | continue [usage_limit?] | -> pending | send(continue) |
@@ -54,6 +66,9 @@ stateDiagram-v2
 | approved | ask | invalid |  |
 | approved | approve | invalid |  |
 | approved | answer | invalid |  |
+| approved | wait | invalid |  |
+| approved | pickup | invalid |  |
+| approved | wait_lost | ignored |  |
 | approved | decline | invalid |  |
 | approved | withdraw | invalid |  |
 | approved | continue | invalid |  |
@@ -66,6 +81,11 @@ stateDiagram-v2
 | answered | ask | invalid |  |
 | answered | approve | invalid |  |
 | answered | answer | invalid |  |
+| answered | wait | invalid |  |
+| answered | pickup [unpicked?] | -> answered | record(pickup) |
+| answered | pickup | ignored |  |
+| answered | wait_lost [uncollected?] | -> not_picked_up | notify(coordinator) |
+| answered | wait_lost | ignored |  |
 | answered | decline | invalid |  |
 | answered | withdraw | invalid |  |
 | answered | continue | invalid |  |
@@ -75,9 +95,27 @@ stateDiagram-v2
 | answered | succeeded | ignored |  |
 | answered | failed | ignored |  |
 | answered | orphaned | ignored |  |
+| not_picked_up | ask | invalid |  |
+| not_picked_up | approve | invalid |  |
+| not_picked_up | answer | invalid |  |
+| not_picked_up | wait | invalid |  |
+| not_picked_up | pickup | -> answered | record(pickup) |
+| not_picked_up | wait_lost | ignored |  |
+| not_picked_up | decline | invalid |  |
+| not_picked_up | withdraw | invalid |  |
+| not_picked_up | continue | invalid |  |
+| not_picked_up | reply | invalid |  |
+| not_picked_up | start | invalid |  |
+| not_picked_up | facts_changed | ignored |  |
+| not_picked_up | succeeded | ignored |  |
+| not_picked_up | failed | ignored |  |
+| not_picked_up | orphaned | ignored |  |
 | declined | ask | invalid |  |
 | declined | approve | invalid |  |
 | declined | answer | invalid |  |
+| declined | wait | invalid |  |
+| declined | pickup | invalid |  |
+| declined | wait_lost | ignored |  |
 | declined | decline | invalid |  |
 | declined | withdraw | invalid |  |
 | declined | continue | invalid |  |
@@ -90,6 +128,9 @@ stateDiagram-v2
 | withdrawn | ask | invalid |  |
 | withdrawn | approve | invalid |  |
 | withdrawn | answer | invalid |  |
+| withdrawn | wait | invalid |  |
+| withdrawn | pickup | invalid |  |
+| withdrawn | wait_lost | ignored |  |
 | withdrawn | decline | invalid |  |
 | withdrawn | withdraw | invalid |  |
 | withdrawn | continue | invalid |  |
@@ -102,6 +143,9 @@ stateDiagram-v2
 | superseded | ask | invalid |  |
 | superseded | approve | invalid |  |
 | superseded | answer | invalid |  |
+| superseded | wait | invalid |  |
+| superseded | pickup | invalid |  |
+| superseded | wait_lost | ignored |  |
 | superseded | decline | invalid |  |
 | superseded | withdraw | invalid |  |
 | superseded | continue | invalid |  |
@@ -114,6 +158,9 @@ stateDiagram-v2
 | executing | ask | invalid |  |
 | executing | approve | invalid |  |
 | executing | answer | invalid |  |
+| executing | wait | invalid |  |
+| executing | pickup | invalid |  |
+| executing | wait_lost | ignored |  |
 | executing | decline | invalid |  |
 | executing | withdraw | invalid |  |
 | executing | continue | invalid |  |
@@ -126,6 +173,9 @@ stateDiagram-v2
 | done | ask | invalid |  |
 | done | approve | invalid |  |
 | done | answer | invalid |  |
+| done | wait | invalid |  |
+| done | pickup | invalid |  |
+| done | wait_lost | ignored |  |
 | done | decline | invalid |  |
 | done | withdraw | invalid |  |
 | done | continue | invalid |  |
@@ -138,6 +188,9 @@ stateDiagram-v2
 | failed | ask | invalid |  |
 | failed | approve | invalid |  |
 | failed | answer | invalid |  |
+| failed | wait | invalid |  |
+| failed | pickup | invalid |  |
+| failed | wait_lost | ignored |  |
 | failed | decline | invalid |  |
 | failed | withdraw | invalid |  |
 | failed | continue | invalid |  |

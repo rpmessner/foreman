@@ -19,7 +19,8 @@ async function deliver(requests) {
       if (stored && Notification.permission === "granted") {
         let notification
         try {
-          notification = new Notification(`${kindLabels[request.kind] || request.kind} · ${request.ticket}`, {
+          notification = new Notification(request.title || `${kindLabels[request.kind] || request.kind} · ${request.ticket}`, {
+            body: request.body || "",
             tag: `foreman-request-${request.id}`
           })
         } catch (error) {

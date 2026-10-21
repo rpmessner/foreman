@@ -2,6 +2,38 @@ defmodule Foreman.RequestMachineTest do
   use ExUnit.Case, async: true
   alias Foreman.Request, as: Machine
 
+  test "an answer without a live waiter is retained until pickup" do
+    context = %{kind: "decision", live_wait: false}
+
+    assert Machine.step(:pending, :answer, context) ==
+             {:not_picked_up, [record: :answer, notify: :coordinator]}
+
+    assert Machine.step(:not_picked_up, :pickup, context) ==
+             {:answered, [record: :pickup]}
+  end
+
+  test "wait rows and a lost waiter retain only uncollected decisions" do
+    assert Machine.step(:pending, :wait, %{}) == {:pending, [record: :wait]}
+    assert Machine.step(:answered, :pickup, %{}) == {:answered, [record: :pickup]}
+    assert Machine.step(:answered, :pickup, %{picked_up: true}) == {:answered, []}
+
+    assert Machine.step(:pending, :answer, %{kind: "decision", live_wait: true}) ==
+             {:answered, [record: :answer, notify: :asker]}
+
+    context = %{kind: "decision", live_wait: false, picked_up: false}
+
+    assert Machine.step(:answered, :wait_lost, context) ==
+             {:not_picked_up, [notify: :coordinator]}
+
+    for context <- [
+          %{context | live_wait: true},
+          %{context | picked_up: true},
+          %{context | kind: "push"}
+        ] do
+      assert Machine.step(:answered, :wait_lost, context) == {:answered, []}
+    end
+  end
+
   test "Continue is a pending usage-limit-only effect, never an approval job" do
     context = %{kind: "session_waiting", reason: "usage_limit"}
     assert Machine.step(:pending, :continue, context) == {:pending, [send: :continue]}
@@ -81,6 +113,9 @@ defmodule Foreman.RequestMachineTest do
     valid =
       MapSet.new([
         {:new, :ask},
+        {:pending, :wait},
+        {:answered, :pickup},
+        {:not_picked_up, :pickup},
         {:pending, :approve},
         {:pending, :answer},
         {:pending, :decline},

@@ -23,6 +23,21 @@ defmodule ForemanWeb.NeedsYouLiveTest do
     %{request: request}
   end
 
+  test "uncollected answers have their own section with ticket, session and answer", %{
+    conn: conn,
+    request: request
+  } do
+    Requests.resolve(request.id, :answer, %{"answer" => "Compact"})
+    {:ok, view, _} = live(conn, "/needs-you")
+    assert has_element?(view, "#not-picked-up-heading", "Answer not picked up")
+    assert has_element?(view, "#uncollected-#{request.id}", "s-1")
+    assert has_element?(view, "#uncollected-#{request.id}", "build")
+    assert has_element?(view, "#uncollected-#{request.id}", "Compact")
+    Requests.wait(request.id, 0)
+    send(view.pid, :reconcile)
+    refute has_element?(view, "#uncollected-#{request.id}")
+  end
+
   test "waiting cards share Open session and usage-only Continue on page and drawer", %{
     conn: conn
   } do
@@ -379,6 +394,7 @@ defmodule ForemanWeb.NeedsYouLiveTest do
     assert has_element?(view, "#pending-requests #request-#{request.id}")
     assert has_element?(view, "#request-#{request.id} [data-recommended=true]")
     assert has_element?(other, "#needs-you-count", "1")
+    Requests.wait(request.id, 2000)
 
     view
     |> form("#decision-#{request.id}", decision: %{note: "A different layout"})
@@ -418,6 +434,7 @@ defmodule ForemanWeb.NeedsYouLiveTest do
     refute has_element?(view, "#request-#{request.id} textarea[name='decision[answer]']")
     assert has_element?(view, "#decision-actions-#{request.id} #submit-answer-#{request.id}")
     assert has_element?(view, "#decision-actions-#{request.id} #submit-decline-#{request.id}")
+    Requests.wait(request.id, 2000)
 
     view
     |> form("#decision-#{request.id}", decision: %{choice: "Compact", note: "Keep the shortcuts"})

@@ -24,6 +24,7 @@ defmodule Foreman.RequestsTest do
     assert request.state == "pending"
     assert request.actor == "pi"
     assert request.session == "build"
+    Requests.wait(request.id, 2000)
     assert {:ok, answered} = Requests.resolve(request.id, :answer, %{"answer" => "Compact"})
     assert answered.state == "answered"
     assert answered.outcome == %{"answer" => "Compact"}
@@ -107,6 +108,7 @@ defmodule Foreman.RequestsTest do
     test "#{event} supersedes pending requests, preserves answered ones, refuses fresh asks" do
       {:ok, pending} = ask()
       {:ok, answered} = ask()
+      Requests.wait(answered.id, 2000)
       Requests.resolve(answered.id, :answer, %{"answer" => "Other"})
       Overlay.apply_event({"sample", "s-1"}, unquote(event))
       assert Requests.get(pending.id).state == "superseded"

@@ -33,7 +33,7 @@ defmodule ForemanWeb.Layouts do
               id="needs-you-badge"
               type="button"
               phx-click="open-request-drawer"
-              aria-label={"Needs you: #{@pending_count} pending requests"}
+              aria-label={"Needs you: #{@pending_count} requests"}
               aria-haspopup="dialog"
               aria-controls="request-drawer"
               aria-expanded={to_string(@drawer_state == :open)}

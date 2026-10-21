@@ -13,6 +13,8 @@ defmodule ForemanWeb.RequestDrawer do
     )
     |> stream_configure(:drawer_requests, dom_id: &("drawer-request-" <> &1.id))
     |> stream(:drawer_requests, [])
+    |> stream_configure(:drawer_uncollected, dom_id: &("drawer-uncollected-" <> &1.id))
+    |> stream(:drawer_uncollected, [])
     |> attach_hook(:request_drawer, :handle_event, &handle_event/3)
   end
 
@@ -37,6 +39,7 @@ defmodule ForemanWeb.RequestDrawer do
             )
       end)
       |> assign(:drawer_ids, ids)
+      |> stream(:drawer_uncollected, Foreman.Requests.not_picked_up(), reset: true)
     else
       socket
     end
@@ -140,6 +143,13 @@ defmodule ForemanWeb.RequestDrawer do
           card={item.card}
           prefix="drawer-"
           event="drawer-resolve"
+        />
+      </div>
+      <div id="drawer-uncollected-requests" phx-update="stream" class="space-y-3">
+        <ForemanWeb.RequestCard.summary
+          :for={{id, request} <- @streams.drawer_uncollected}
+          id={id}
+          request={request}
         />
       </div>
     </Sheet.sheet>

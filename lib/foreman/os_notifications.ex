@@ -60,32 +60,37 @@ defmodule Foreman.OsNotifications do
   defp schedule(%{interval: ms}), do: Process.send_after(self(), :tick, ms)
 
   defp scan(%{platform: {:unix, :darwin}} = state) do
-    pending = Requests.pending()
+    pending = Requests.pending() ++ Requests.not_picked_up()
 
     enabled =
       if is_nil(state.enabled), do: enabled?(Foreman.RuntimeState.config()), else: state.enabled
 
     seen =
       Enum.reduce(pending, state.seen, fn request, seen ->
-        if MapSet.member?(seen, request.id) do
+        key = {request.id, request.state}
+
+        if MapSet.member?(seen, key) do
           seen
         else
           context = %{
             enabled: enabled,
-            after_boot: DateTime.compare(request.inserted_at, state.booted_at) != :lt
+            after_boot: DateTime.compare(notification_time(request), state.booted_at) != :lt
           }
 
           {_, effects} = OsNotification.step(:unseen, :pending, context)
           if {:post, :notification} in effects, do: post(state.runner, message(request))
-          MapSet.put(seen, request.id)
+          MapSet.put(seen, key)
         end
       end)
 
     # A request leaves pending for good, so only pending ids need remembering.
-    %{state | seen: MapSet.intersection(seen, MapSet.new(pending, & &1.id))}
+    %{state | seen: MapSet.intersection(seen, MapSet.new(pending, &{&1.id, &1.state}))}
   end
 
   defp scan(state), do: state
+
+  defp notification_time(%{state: "not_picked_up"} = request), do: request.updated_at
+  defp notification_time(request), do: request.inserted_at
 
   defp post(runner, {title, body}) do
     Task.start(fn ->
@@ -102,6 +107,11 @@ defmodule Foreman.OsNotifications do
   def enabled?(_), do: true
 
   @doc "The notification's `{title, body}` for a request."
+  def message(%{state: "not_picked_up"} = request) do
+    {"Answer not picked up · " <> request.bead_id,
+     line("#{request.session || request.actor} · #{request.outcome["answer"]}")}
+  end
+
   def message(request) do
     ticket = if request.repo_key == "__foreman__", do: "Coordinator", else: request.bead_id
     {kind, body} = describe(request.kind, request.facts || %{})
