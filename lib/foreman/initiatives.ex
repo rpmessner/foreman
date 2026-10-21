@@ -75,6 +75,8 @@ defmodule Foreman.Initiatives do
           title: raw["title"],
           type: raw["issue_type"],
           status: raw["status"],
+          on_hold_reason: raw["on_hold_reason"],
+          on_hold_since: created_at(raw["on_hold_since"]),
           created_at: created_at(raw["created_at"] || raw["created"]),
           labels: raw["labels"] || [],
           stage: stage,
@@ -105,7 +107,7 @@ defmodule Foreman.Initiatives do
 
     {standalone, unplanned} =
       tree.orphans
-      |> Enum.reject(&(&1.status == "closed"))
+      |> Enum.reject(&(&1.status in ["closed", "on_hold"]))
       |> Enum.sort_by(fn ticket ->
         age =
           case ticket.created_at do
@@ -143,6 +145,14 @@ defmodule Foreman.Initiatives do
 
     %{
       drafts: drafts,
+      on_hold:
+        beads
+        |> Enum.filter(&(&1.status == "on_hold" and matches?(&1, filters)))
+        |> Enum.map(&Map.put(&1, :on_hold_epics, containing_epics(tree.epics, &1.key)))
+        |> Enum.sort_by(
+          &{Foreman.Priority.order_key(&1), is_nil(&1.on_hold_since),
+           &1.on_hold_since && DateTime.to_unix(&1.on_hold_since), &1.key}
+        ),
       epics: Enum.filter(tree.epics, &epic_matches?(&1, filters)),
       orphans: Enum.filter(unplanned, &matches?(&1, filters)),
       standalone: Enum.filter(standalone, &matches?(&1, standalone_filters(filters))),
@@ -153,6 +163,20 @@ defmodule Foreman.Initiatives do
       types: beads |> Enum.map(& &1.type) |> Enum.uniq() |> Enum.sort(),
       labels: beads |> Enum.flat_map(& &1.labels) |> Enum.uniq() |> Enum.sort()
     }
+  end
+
+  defp containing_epics(epics, key) do
+    Enum.flat_map(epics, fn epic ->
+      case containing_epics(epic.children, key) do
+        [] ->
+          if epic.key != key and MapSet.member?(epic.members, key),
+            do: [Map.take(epic, [:id, :title])],
+            else: []
+
+        nested ->
+          nested
+      end
+    end)
   end
 
   defp standalone_filters(%{"view" => "in-flight"} = filters),
@@ -262,6 +286,8 @@ defmodule Foreman.Initiatives do
 
   defp stale?(raw, stage, last, threshold) do
     active = stage in [:dispatched, :building] or raw["status"] == "in_progress"
-    active and (is_nil(last) or NaiveDateTime.diff(NaiveDateTime.utc_now(), last) > threshold)
+
+    raw["status"] != "on_hold" and active and
+      (is_nil(last) or NaiveDateTime.diff(NaiveDateTime.utc_now(), last) > threshold)
   end
 end

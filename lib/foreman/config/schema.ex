@@ -18,7 +18,8 @@ defmodule Foreman.Config.Schema do
           %{
             "key" => :key,
             "title" => :text,
-            "statuses" => {:list, {:one_of, ~w(open in_progress blocked deferred closed)}},
+            "statuses" =>
+              {:list, {:one_of, ~w(open in_progress blocked deferred on_hold closed)}},
             "stages" => {:list, :stage},
             "stale" => :boolean
           }}},

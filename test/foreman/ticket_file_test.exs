@@ -68,6 +68,42 @@ defmodule Foreman.TicketFileTest do
     assert legacy.facts["supersedes"] == []
   end
 
+  test "on hold reason round trips quoted punctuation and rejects missing or blank reasons" do
+    text = String.replace(canonical(), "status: open", "status: on_hold")
+
+    for reason <- [nil, "", "  ", 42] do
+      input =
+        String.replace(
+          text,
+          "close_reason: null",
+          "close_reason: null\non_hold_reason: #{Jason.encode!(reason)}"
+        )
+
+      assert {:error, message} = TicketFile.parse(input)
+      assert message =~ "on_hold_reason"
+    end
+
+    assert {:error, _} = TicketFile.parse(text)
+    reason = "Waiting: parts #1\nThen resume"
+
+    input =
+      String.replace(
+        text,
+        "close_reason: null",
+        "close_reason: null\non_hold_reason: #{Jason.encode!(reason)}\non_hold_since: 2026-10-21"
+      )
+
+    assert {:ok, ticket} = TicketFile.parse(input)
+    assert ticket.facts["on_hold_reason"] == reason
+    assert TicketFile.print(ticket) == input
+    assert {:ok, _} = TicketFile.parse(canonical())
+
+    assert {:error, _} =
+             TicketFile.parse(
+               String.replace(input, "on_hold_since: 2026-10-21", "on_hold_since: yesterday")
+             )
+  end
+
   test "supersedes rejects invalid ids and non-list values" do
     for value <- ["[invalid]", "null", "false", "bb-old"] do
       assert {:error, "supersedes must be a list of ids"} =

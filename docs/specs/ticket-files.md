@@ -29,7 +29,7 @@ The user uses beads only for two things: a flat-file record of planned work in t
    id: fm-zgd.3
    title: Push requests executed by the worker
    type: feature            # epic | feature | task | bug | decision | chore
-   status: open             # open | in_progress | closed | deferred
+   status: open             # open | in_progress | closed | deferred | on_hold
    priority: 2              # 0 (highest) .. 4
    parent: fm-zgd
    blocked_by: [fm-zgd.1]
@@ -53,6 +53,9 @@ The user uses beads only for two things: a flat-file record of planned work in t
    ```
 
    `supersedes` is optional when reading older files (defaults to `[]`); canonical writes include it. Facts in frontmatter, prose in sections. Unknown frontmatter keys are errors. Acceptance items are Markdown checkboxes; the board shows checked/total. Notes are dated lines appended under `## Notes` (replacing `bd comments`). Other `##` sections (Design, Interfaces, Why) are free prose.
+   **On hold tickets** (`fm-c2w.33`). Deliberately set-aside work uses `status: on_hold`, labelled **On hold**, distinct from a planning session's **parked** state. `foreman update <id> --status on_hold --reason "..."` requires nonblank text, stores `on_hold_reason` and an ISO date `on_hold_since`, and preserves that date while held. `new --status on_hold --reason "..."` works too. Leaving the status clears both fields. Handwritten on-hold files require the reason; the date is optional. Both fields are optional for older files, omitted when null on canonical writes. The home section includes held children without removing their epic membership; they never count as stale. `ready` still includes only open tickets. The app never writes these facts.
+
+   Older CLIs and their `foreman check` reject the new status/keys: upgrade readers and writers before using it. Unheld canonical files retain their previous format; after resuming, the hold fields are omitted again.
 4. **Ids** (user). Keep the beads scheme and every existing id: `<prefix>-<code>` for top level (short random base36, checked against existing files), `<parent>.<N>` for children (next free N). The prefix comes from the repo's `foreman.toml` entry. Ticket creation stays a main-checkout job; build sessions report fallout and the coordinator files it. A child-number collision between branches surfaces as a git add/add conflict; `foreman renumber <old> <new>` rewrites the file and every reference to it.
 5. **Agent toolset** (user). The `foreman` CLI writes ticket files directly in the current checkout, with no server needed: `new`, `show`, `ls`, `ready` (open, no open blockers, not an epic), `update`, `close --reason`, `reopen`, `dep add|rm`, `note`, `tree`, `renumber`, `check`. It writes a canonical form (fixed key order, sorted lists, one trailing newline) so its edits make minimal diffs, and keeps every rule the CLI already has: never fails an agent except for invalid input, `--json` everywhere. Stage and session events still go to the server as today.
 6. **Validation** (user). `foreman check` validates every file: frontmatter schema, id matches filename, parent and blockers exist, no dependency cycles, no epic as a blocker of its own child. Related, supersedes and discovered-from references must be valid ids but may name absent tickets; they do not block readiness. It runs from each repo's pre-commit hook (the hook that runs the beads export today), so a broken ticket file cannot be committed.

@@ -42,6 +42,116 @@ defmodule ForemanWeb.InitiativesLiveTest do
     :ok
   end
 
+  test "on hold tickets have their own section, retain epic membership, and never become stale",
+       %{conn: conn} do
+    rows = [
+      b("e", "epic"),
+      b("free", "task"),
+      b("child", "task", [%{depends_on_id: "e", type: "parent-child"}])
+    ]
+
+    rows =
+      Enum.map(rows, fn row ->
+        if row.id == "e",
+          do: row,
+          else:
+            Map.merge(row, %{
+              status: "on_hold",
+              on_hold_reason: "Awaiting parts",
+              on_hold_since: "2026-10-21T00:00:00Z"
+            })
+      end)
+
+    assert {:ok, _} =
+             Foreman.Beads.Projection.replace(
+               "sample",
+               Enum.map_join(rows, "\n", &Jason.encode!/1)
+             )
+
+    Foreman.Overlay.apply_event({"sample", "free"}, {:dispatch, %{window: "old"}})
+    Foreman.Overlay.apply_event({"sample", "child"}, {:dispatch, %{window: "old"}})
+    Foreman.Overlay.apply_event({"sample", "child"}, {:progress, %{body: "Paused"}})
+    Foreman.Repo.update_all("sessions", set: [last_seen_at: ~N[2020-01-01 00:00:00]])
+    snapshot = Foreman.Initiatives.snapshot(%{"view" => "open"})
+    assert Enum.map(Map.get(snapshot, :on_hold, []), & &1.id) |> Enum.sort() == ~w(child free)
+    assert snapshot.orphans == []
+    assert snapshot.standalone == []
+    assert [%{planned: [%{id: "child", stale: false}]}] = snapshot.epics
+    assert Enum.all?(snapshot.on_hold, &(not &1.stale))
+    stale = Foreman.Initiatives.snapshot(%{"view" => "stale"})
+    assert stale.on_hold == []
+    assert stale.epics == []
+    assert stale.standalone == []
+    assert stale.orphans == []
+
+    assert Foreman.Initiatives.snapshot(%{"view" => "open", "status" => "on_hold"}).on_hold
+           |> length() == 2
+
+    assert Foreman.Initiatives.snapshot(%{"view" => "open", "q" => "absent"}).on_hold == []
+    assert %{key: {"sample", "free"}} = Foreman.Sessions.target({"sample", "free"})
+    {:ok, view, _} = live(conn, "/?view=open")
+    assert has_element?(view, "#on-hold-panel", "On hold")
+    view |> element("#toggle-on-hold") |> render_click()
+    view |> element("#toggle-on-hold-project-sample") |> render_click()
+    assert ids(view, "#on-hold [data-bead]") |> Enum.sort() == ~w(child free)
+    assert has_element?(view, "#on-hold [data-bead=free] [data-ticket-status=on_hold]", "On hold")
+    assert has_element?(view, "#on-hold [data-bead=free]", "Awaiting parts")
+    assert has_element?(view, "#on-hold [data-bead=child] [data-hold-epic=e]")
+
+    assert has_element?(
+             view,
+             "#on-hold [data-bead=free] [data-hold-since] time[datetime='2026-10-21T00:00:00Z']"
+           )
+
+    refute has_element?(view, "#on-hold [data-bead=free]", "parked")
+  end
+
+  test "on hold epics navigate to their board and badges stay human readable", %{conn: conn} do
+    rows =
+      Enum.map(
+        [b("e", "epic"), b("child", "task", [%{depends_on_id: "e", type: "parent-child"}])],
+        &Map.merge(&1, %{status: "on_hold", on_hold_reason: "Awaiting review"})
+      )
+
+    assert {:ok, _} =
+             Foreman.Beads.Projection.replace(
+               "sample",
+               Enum.map_join(rows, "\n", &Jason.encode!/1)
+             )
+
+    {:ok, view, _} = live(conn, "/?view=open")
+    view |> element("#toggle-on-hold") |> render_click()
+    view |> element("#toggle-on-hold-project-sample") |> render_click()
+
+    assert has_element?(
+             view,
+             "#on-hold [data-bead=e] a[data-phx-link=redirect][href^='/epics/sample/e']"
+           )
+
+    {:ok, board, _} = live(conn, "/epics/sample/e")
+    assert has_element?(board, "#epic-title")
+    refute has_element?(board, "main", "on_hold")
+    assert has_element?(board, "main", "On hold")
+    assert Foreman.Drilldown.epic({"sample", "e"}).total == 1
+  end
+
+  test "sheet labels ticket hold separately from planning session state and shows its reason", %{
+    conn: conn
+  } do
+    row =
+      Map.merge(b("held", "task"), %{
+        status: "on_hold",
+        on_hold_reason: "Awaiting parts",
+        on_hold_since: "2026-10-21T00:00:00Z"
+      })
+
+    assert {:ok, _} = Foreman.Beads.Projection.replace("sample", Jason.encode!(row))
+    {:ok, view, _} = live(conn, "/?view=open&ticket=sample:held")
+    assert has_element?(view, "#ticket-status", "On hold")
+    assert has_element?(view, "#ticket-on-hold-reason", "Awaiting parts")
+    assert has_element?(view, "#ticket-on-hold-since time[title='2026-10-21T00:00:00Z']")
+  end
+
   test "parentless tickets with board activity are standalone, including ended sessions and requests",
        %{conn: conn} do
     rows =

@@ -27,6 +27,7 @@ defmodule Foreman.FsmDocsTest do
   for {name, module} <- [
         {"stage", Foreman.Stage},
         {"priority_override", Foreman.PriorityOverride},
+        {"ticket_status_machine", Foreman.TicketStatusMachine},
         {"deploy_lifecycle", Foreman.DeployLifecycle},
         {"request", Foreman.Request},
         {"request_wait", Foreman.RequestWait},

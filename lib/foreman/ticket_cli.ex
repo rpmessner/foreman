@@ -22,13 +22,15 @@ defmodule Foreman.TicketCLI do
     "open" => :open,
     "in_progress" => :in_progress,
     "closed" => :closed,
-    "deferred" => :deferred
+    "deferred" => :deferred,
+    "on_hold" => :on_hold
   }
   @status_events %{
     "open" => :reopen,
     "in_progress" => :start,
     "closed" => :close,
-    "deferred" => :defer
+    "deferred" => :defer,
+    "on_hold" => :hold
   }
 
   def command?(args, opts \\ []) do
@@ -285,7 +287,11 @@ defmodule Foreman.TicketCLI do
         end
       end)
 
-    if opts[:status], do: set_status(ticket, opts[:status]), else: ticket
+    ticket = if opts[:status], do: set_status(ticket, opts[:status]), else: ticket
+
+    if opts[:status] == "on_hold",
+      do: put_in(ticket, [:facts, "on_hold_reason"], opts[:reason]),
+      else: ticket
   end
 
   defp set_status(ticket, status) do
@@ -302,6 +308,11 @@ defmodule Foreman.TicketCLI do
         |> Map.put("status", to_string(next))
         |> Map.put("closed", if(next == :closed, do: ticket.facts["closed"] || today()))
         |> Map.put("close_reason", if(next == :closed, do: ticket.facts["close_reason"]))
+        |> Map.put("on_hold_reason", if(next == :on_hold, do: ticket.facts["on_hold_reason"]))
+        |> Map.put(
+          "on_hold_since",
+          if(next == :on_hold, do: ticket.facts["on_hold_since"] || today())
+        )
 
       %{ticket | facts: facts}
     else
@@ -408,8 +419,8 @@ defmodule Foreman.TicketCLI do
     allowed =
       [:json] ++
         case verb do
-          "new" -> fields
-          "update" -> fields
+          "new" -> fields ++ if(opts[:status] == "on_hold", do: [:reason], else: [])
+          "update" -> fields ++ if(opts[:status] == "on_hold", do: [:reason], else: [])
           "close" -> [:reason]
           "note" -> [:actor]
           "ls" -> [:status, :type]

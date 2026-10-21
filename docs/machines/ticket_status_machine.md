@@ -9,6 +9,7 @@ stateDiagram-v2
     fsm_any --> in_progress: start
     fsm_any --> closed: close
     fsm_any --> deferred: defer
+    fsm_any --> on_hold: hold
     state "any state" as fsm_any
 ```
 
@@ -18,15 +19,24 @@ stateDiagram-v2
 | open | start | -> in_progress |  |
 | open | close | -> closed |  |
 | open | defer | -> deferred |  |
+| open | hold | -> on_hold |  |
 | in_progress | reopen | -> open |  |
 | in_progress | start | -> in_progress |  |
 | in_progress | close | -> closed |  |
 | in_progress | defer | -> deferred |  |
+| in_progress | hold | -> on_hold |  |
 | closed | reopen | -> open |  |
 | closed | start | -> in_progress |  |
 | closed | close | -> closed |  |
 | closed | defer | -> deferred |  |
+| closed | hold | -> on_hold |  |
 | deferred | reopen | -> open |  |
 | deferred | start | -> in_progress |  |
 | deferred | close | -> closed |  |
 | deferred | defer | -> deferred |  |
+| deferred | hold | -> on_hold |  |
+| on_hold | reopen | -> open |  |
+| on_hold | start | -> in_progress |  |
+| on_hold | close | -> closed |  |
+| on_hold | defer | -> deferred |  |
+| on_hold | hold | -> on_hold |  |

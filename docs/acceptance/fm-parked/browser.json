@@ -1,0 +1,82 @@
+{
+  "preview": {
+    "app": "foreman",
+    "branch": "fm-parked",
+    "database": "foreman_preview_fm_parked_5fff04524c0a",
+    "missing": false,
+    "owner": "fm-parked",
+    "port": 4881,
+    "state": "running",
+    "unit": "devserve-foreman-fm_parked-5fff04524c0a.service",
+    "url": "http://127.0.0.1:4881",
+    "worktree": "."
+  },
+  "evidence": [
+    {
+      "width": 1440,
+      "theme": "light",
+      "onHoldOrder": [
+        "hold-child",
+        "hold-free"
+      ],
+      "epicMembership": true,
+      "sheetReason": true,
+      "distinctPlanningState": true,
+      "excludedFromStale": true,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "onHoldOrder": [
+        "hold-child",
+        "hold-free"
+      ],
+      "epicMembership": true,
+      "sheetReason": true,
+      "distinctPlanningState": true,
+      "excludedFromStale": true,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "onHoldOrder": [
+        "hold-child",
+        "hold-free"
+      ],
+      "epicMembership": true,
+      "sheetReason": true,
+      "distinctPlanningState": true,
+      "excludedFromStale": true,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "onHoldOrder": [
+        "hold-child",
+        "hold-free"
+      ],
+      "epicMembership": true,
+      "sheetReason": true,
+      "distinctPlanningState": true,
+      "excludedFromStale": true,
+      "overflow": false,
+      "errors": []
+    }
+  ],
+  "api": [
+    {
+      "path": "/api/repos",
+      "status": 401
+    },
+    {
+      "path": "/api/tickets/hold-demo/hold-free",
+      "status": 401
+    }
+  ]
+}
