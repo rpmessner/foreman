@@ -2,7 +2,7 @@
 id: fm-11q
 title: "Ticket sheet: rename 'Beads fields', human time for created at"
 type: bug
-status: open
+status: in_progress
 priority: 3
 parent: null
 blocked_by: []
