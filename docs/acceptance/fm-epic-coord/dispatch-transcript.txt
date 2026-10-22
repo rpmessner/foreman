@@ -1,0 +1,31 @@
+launched pi in pane 'epic-build' (%1) (/tmp/fm-epic-dispatch.9NKpkU)
+session=epic-build pane=%1 tmux=/tmp/tmux-1000/fm-epic-dispatch-863598,863602,0
+Layout after dispatch:
+sample:epic-test @0 %0 build= active=1
+sample:epic-test @0 %1 build=epic-build active=0
+Stub pi capture:
+STUB PI
+ARG: --name
+STUB PI
+ARG: epic-build
+STUB PI
+ARG: --model
+STUB PI
+ARG: stub/model
+STUB PI
+ARG: Scratch build brief
+
+[pi exited] press enter
+
+
+
+
+
+
+
+
+
+
+
+
+

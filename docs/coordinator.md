@@ -15,6 +15,14 @@ Pane startup uses the tmux server/session environment, not the web service's cli
 
 The singleton uses the reserved system key `__foreman__/coordinator` in the existing session table. It has no ticket overlay or configured project. Only session-waiting requests use that system subject; ordinary approvals still need tickets. Idle time never parks this session. A missing window becomes `ended`, preserving its conversation ID.
 
+## Epic coordinators
+
+Launch a ticketed epic from its board row or epic page. The coordinator runs in the project's main checkout, in a window named by the epic ID. It owns only that epic and uses the dispatch skill's `pi-window --pane` mode. Build panes inherit the coordinator's tmux server and project session; `FOREMAN_SESSION` remains the logical build name.
+
+Building tickets expose Focus in their ticket sheet. Dispatch's `window` field holds the stable `%pane-id`; Focus selects both its containing window and that pane. Ended or parked epic conversations use the existing Relaunch and idle-parking lifecycle. The singleton main coordinator is unchanged.
+
+The launch wrapper records its coordinator pane in the window's `@foreman-pane` option. Continue uses that identity rather than the active pane, which may be a build. Older windows without the option can Continue only when they contain one pane; ambiguous multi-pane windows fail closed.
+
 ## Verification notes
 
 `FOREMAN_HOST_ACCEPTANCE=1 mix test test/foreman/pane_environment_test.exs` checks the real login environment on a clean foreground scratch server. Without that flag, the test uses a fixture shell and tools. Both use stub Claude and a local ticket fixture.

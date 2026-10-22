@@ -3,12 +3,14 @@ defmodule ForemanWeb.PlanningSession do
 
   def launch(socket, %{"project" => project, "ticket" => ticket} = params) do
     result =
-      if params["action"] == "relaunch",
-        do: Foreman.Sessions.relaunch({project, ticket}),
-        else: Foreman.Sessions.launch({project, ticket})
+      case params["action"] do
+        "focus-build" -> Foreman.Sessions.focus_build({project, ticket})
+        "relaunch" -> Foreman.Sessions.relaunch({project, ticket})
+        _ -> Foreman.Sessions.launch({project, ticket})
+      end
 
     case result do
-      {:ok, _} ->
+      result when result == :ok or elem(result, 0) == :ok ->
         Phoenix.LiveView.clear_flash(socket, :error)
 
       {:error, reason} ->

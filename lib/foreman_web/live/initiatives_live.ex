@@ -640,7 +640,7 @@ defmodule ForemanWeb.InitiativesLive do
                   <Badge.badge :if={row.stale} color="warning" class="ml-2">stale</Badge.badge>
                 </div>
               </div>
-              <div>
+              <div class="flex flex-wrap items-center gap-2">
                 <Badge.badge color={stage_color(row.stage)}>{row.stage}</Badge.badge>
                 <ForemanWeb.PlanningSession.launch_button
                   id={"launch-" <> id}
@@ -686,13 +686,15 @@ defmodule ForemanWeb.InitiativesLive do
                 >
                 </span>
               </div>
-              <span class="text-xs">{length(row.fallout)}</span>
+              <span class="text-xs">
+                <span class="md:hidden">Fallout </span>{length(row.fallout)}
+              </span>
               <span
                 class="text-xs text-foreground-softer"
                 data-cr-count={row.cr_count}
                 aria-label={"#{row.cr_count} open change requests"}
               >
-                {row.cr_count}
+                <span class="md:hidden">CRs </span>{row.cr_count}
               </span>
             </div>
           <% :section -> %>

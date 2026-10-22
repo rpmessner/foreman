@@ -1,0 +1,66 @@
+[
+  {
+    "name": "board",
+    "width": 1440,
+    "theme": "light",
+    "control": "Launch",
+    "overflow": false,
+    "errors": []
+  },
+  {
+    "name": "epic",
+    "width": 1440,
+    "theme": "light",
+    "control": "Launch",
+    "overflow": false,
+    "errors": []
+  },
+  {
+    "name": "board",
+    "width": 1440,
+    "theme": "dark",
+    "control": "Launch",
+    "overflow": false,
+    "errors": []
+  },
+  {
+    "name": "epic",
+    "width": 1440,
+    "theme": "dark",
+    "control": "Launch",
+    "overflow": false,
+    "errors": []
+  },
+  {
+    "name": "board",
+    "width": 390,
+    "theme": "light",
+    "control": "Launch",
+    "overflow": false,
+    "errors": []
+  },
+  {
+    "name": "epic",
+    "width": 390,
+    "theme": "light",
+    "control": "Launch",
+    "overflow": false,
+    "errors": []
+  },
+  {
+    "name": "board",
+    "width": 390,
+    "theme": "dark",
+    "control": "Launch",
+    "overflow": false,
+    "errors": []
+  },
+  {
+    "name": "epic",
+    "width": 390,
+    "theme": "dark",
+    "control": "Launch",
+    "overflow": false,
+    "errors": []
+  }
+]

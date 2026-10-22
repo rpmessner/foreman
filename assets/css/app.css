@@ -33,6 +33,14 @@ a.bb-nav-active { background: light-dark(#e4e4e7, #3f3f46); color: var(--foregro
 .bb-initiative-grid { display: grid; grid-template-columns: 130px minmax(240px,1fr) 100px 130px 86px 50px 35px; gap: 16px; align-items: center; min-width: 970px; }
 .bb-initiative-row { padding: 12px 16px; border-top: 1px solid var(--border-base); transition: background .15s; }
 .bb-initiative-head { padding: 10px 16px; font-size: 12px; color: var(--foreground-softer); background: var(--background-sunken); }
+@media (max-width: 767px) {
+  .bb-initiative-head { display: none; }
+  .bb-initiative-row { min-width: 0; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+  .bb-initiative-row > :nth-child(1), .bb-initiative-row > :nth-child(2) { grid-column: span 6; }
+  .bb-initiative-row > :nth-child(2) a { white-space: normal; overflow-wrap: anywhere; }
+  .bb-initiative-row > :nth-child(3), .bb-initiative-row > :nth-child(4) { grid-column: span 3; }
+  .bb-initiative-row > :nth-child(n+5) { grid-column: span 2; }
+}
 .bb-section-label { padding: 8px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; background: var(--background-sunken); color: var(--foreground-softer); }
 .bb-progress { height: 6px; background: var(--background-sunken); border: 1px solid var(--border-base); border-radius: 99px; overflow: hidden; }
 .bb-progress span { display: block; height: 100%; background: #22c55e; }

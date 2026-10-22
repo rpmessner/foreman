@@ -216,7 +216,7 @@ defmodule ForemanWeb.InitiativesLiveTest do
 
   test "ticket rows open a URL sheet and closing retains filters and expansion", %{conn: conn} do
     {:ok, view, _} = live(conn, "/?project=sample&type=bug")
-    view |> element("[data-bead=e] button") |> render_click()
+    view |> element("#toggle-c2FtcGxlL2U") |> render_click()
     view |> element("[data-bead=f] a") |> render_click()
     path = assert_patch(view)
     assert URI.decode_query(URI.parse(path).query)["ticket"] == "sample:f"
@@ -393,7 +393,7 @@ defmodule ForemanWeb.InitiativesLiveTest do
            )
 
     refute has_element?(view, "[data-bead=f]")
-    view |> element("[data-bead=e] button") |> render_click()
+    view |> element("#toggle-c2FtcGxlL2U") |> render_click()
     assert has_element?(view, "#epics h3", "Fallout")
     assert has_element?(view, "[data-bead=f]", "bug")
     assert has_element?(view, "#toggle-unplanned[aria-expanded=false]")
@@ -409,7 +409,7 @@ defmodule ForemanWeb.InitiativesLiveTest do
     {:ok, view, _} = live(conn, "/")
     view |> form("#initiative-filters", filters: %{type: "bug"}) |> render_change()
     assert has_element?(view, "[data-bead=e] [role=progressbar][aria-valuemax='2']")
-    view |> element("[data-bead=e] button") |> render_click()
+    view |> element("#toggle-c2FtcGxlL2U") |> render_click()
     assert has_element?(view, "[data-bead=f]")
     refute has_element?(view, "[data-bead=a]")
     Foreman.Overlay.apply_event({"sample", "f"}, {:cr_opened, %{number: 1}})
@@ -464,10 +464,10 @@ defmodule ForemanWeb.InitiativesLiveTest do
     {:ok, view, _} = live(conn, "/")
     assert has_element?(view, "[data-bead=e] [aria-valuemax='3']")
     refute has_element?(view, "[data-bead=sub]")
-    view |> element("[data-bead=e] button") |> render_click()
+    view |> element("#toggle-c2FtcGxlL2U") |> render_click()
     assert has_element?(view, "[data-bead=sub] [aria-valuemax='1']")
     refute has_element?(view, "[data-bead=nested]")
-    view |> element("[data-bead=sub] button") |> render_click()
+    view |> element("[data-bead=sub] button[phx-click=toggle]") |> render_click()
     assert has_element?(view, "[data-bead=nested]")
   end
 
@@ -499,7 +499,7 @@ defmodule ForemanWeb.InitiativesLiveTest do
     assert ids(view, "#done [data-kind=epic]") == ["done.2", "done.10", "shipped"]
     assert has_element?(view, "#done [data-bead='done.2'] .bb-epic-progress", "—")
     refute has_element?(view, "#done [data-bead='done.2'] [role=progressbar]")
-    view |> element("#done [data-bead=shipped] button") |> render_click()
+    view |> element("#done [data-bead=shipped] button[phx-click=toggle]") |> render_click()
     assert has_element?(view, "#done [data-bead='shipped.1']")
     view |> form("#initiative-filters", filters: %{q: "done.2"}) |> render_change()
     assert has_element?(view, "#done-count", "1")
@@ -512,7 +512,7 @@ defmodule ForemanWeb.InitiativesLiveTest do
     conn: conn
   } do
     {:ok, view, _} = live(conn, "/?view=all")
-    view |> element("[data-bead=e] button") |> render_click()
+    view |> element("#toggle-c2FtcGxlL2U") |> render_click()
     Foreman.Overlay.apply_event({"sample", "e"}, :bead_epic_closed)
     send(view.pid, :reconcile)
     refute has_element?(view, "#epics [data-bead=e]")
@@ -560,7 +560,7 @@ defmodule ForemanWeb.InitiativesLiveTest do
 
     {:ok, view, _} = live(conn, "/")
     assert has_element?(view, "[data-bead=e] [aria-valuemax='3']")
-    view |> element("[data-bead=e] button") |> render_click()
+    view |> element("#toggle-c2FtcGxlL2U") |> render_click()
     assert has_element?(view, "[data-bead=external]", "Title external")
     assert [%{"dependencies" => []}] = Foreman.Beads.Projection.list_raw("other")
   end
@@ -686,7 +686,7 @@ defmodule ForemanWeb.InitiativesLiveTest do
     Foreman.Overlay.apply_event({"sample", "f"}, {:dispatch, %{window: "worker"}})
     send(view.pid, :reconcile)
     assert has_element?(view, "[data-bead=e]")
-    view |> element("[data-bead=e] button") |> render_click()
+    view |> element("#toggle-c2FtcGxlL2U") |> render_click()
     assert has_element?(view, "[data-bead=f]")
     refute has_element?(view, "[data-bead=a]")
     view |> element("#view-all") |> render_click()
@@ -778,7 +778,7 @@ defmodule ForemanWeb.InitiativesLiveTest do
     Foreman.Repo.query!("UPDATE sessions SET last_seen_at = NOW() - INTERVAL '3 hours'")
     send(view.pid, :reconcile)
     assert has_element?(view, "[data-bead=e] [aria-valuemax='2']")
-    view |> element("[data-bead=e] button") |> render_click()
+    view |> element("#toggle-c2FtcGxlL2U") |> render_click()
     assert has_element?(view, "[data-bead=f]")
     refute has_element?(view, "[data-bead=a]")
     refute has_element?(view, "#advanced-filter-count")

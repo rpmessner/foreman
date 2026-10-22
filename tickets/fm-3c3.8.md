@@ -2,7 +2,7 @@
 id: fm-3c3.8
 title: "Launch an epic coordinator for a ticketed epic"
 type: feature
-status: open
+status: in_progress
 priority: 2
 parent: fm-3c3
 blocked_by: ["fm-3c3.7"]

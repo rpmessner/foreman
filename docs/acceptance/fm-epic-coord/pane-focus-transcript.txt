@@ -1,0 +1,4 @@
+Scratch socket: fm-test-324
+Focus build target: %1
+Selected window and pane: @0 %1
+Expected: @0 %1

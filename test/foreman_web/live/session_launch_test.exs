@@ -37,10 +37,22 @@ defmodule ForemanWeb.SessionLaunchTest do
     refute has_element?(child, "#ticket-launch")
   end
 
-  test "draft Launch appears in the list and detail, not for ticketed epics", %{conn: conn} do
+  test "Launch appears for drafts and ticketed epics, but not terminal epics", %{conn: conn} do
     {:ok, view, _} = live(conn, "/")
     assert has_element?(view, "#drafts [phx-click=launch-session][phx-value-ticket='draft:plan']")
-    refute has_element?(view, "#epics [phx-click=launch-session]")
+    assert has_element?(view, "#epics [phx-click=launch-session][phx-value-ticket='x-2']")
+    {:ok, epic, _} = live(conn, "/epics/sample/x-2")
+    assert has_element?(epic, "#epic-launch", "Launch")
+
+    for stage <- [:done, :abandoned] do
+      Foreman.Repo.query!("UPDATE epics SET stage = $1 WHERE bead_id = 'x-2'", [to_string(stage)])
+      send(view.pid, :reconcile)
+      send(epic.pid, :reconcile)
+      assert has_element?(epic, "#epic-launch") == stage in [:building, :shipping]
+
+      assert has_element?(view, "#epics [phx-click=launch-session][phx-value-ticket='x-2']") ==
+               stage in [:building, :shipping]
+    end
 
     Foreman.Repo.query!(
       "UPDATE epics SET stage = 'idea' WHERE repo_key = 'sample' AND bead_id = 'x-2'"
@@ -86,12 +98,11 @@ defmodule ForemanWeb.SessionLaunchTest do
       })
     end
 
-    Foreman.Repo.query!("UPDATE epics SET stage = 'idea' WHERE bead_id = 'x-2'")
     {:ok, sheet, _} = live(conn, "/?ticket=sample:x-1")
     assert has_element?(sheet, "#ticket-launch", "Focus")
     assert has_element?(sheet, "#drafts [phx-click=launch-session]", "Focus")
     assert has_element?(sheet, "#epics [phx-click=launch-session]", "Focus")
-    {:ok, detail, _} = live(conn, "/epics/sample/draft:plan")
+    {:ok, detail, _} = live(conn, "/epics/sample/x-2")
     assert has_element?(detail, "#epic-launch", "Focus")
     Foreman.Repo.query!("UPDATE planning_sessions SET state = 'ended'")
     send(sheet.pid, :reconcile)
@@ -103,6 +114,82 @@ defmodule ForemanWeb.SessionLaunchTest do
     assert has_element?(sheet, "#drafts [phx-click=launch-session]", "Relaunch")
     assert has_element?(sheet, "#epics [phx-click=launch-session]", "Relaunch")
     assert has_element?(detail, "#epic-launch", "Relaunch")
+  end
+
+  test "building ticket Focus selects its dispatched pane, not the coordinator", %{conn: conn} do
+    socket = "fm-build-focus-#{System.unique_integer([:positive])}"
+
+    {_, 0} =
+      System.cmd("tmux", [
+        "-L",
+        socket,
+        "-f",
+        "/dev/null",
+        "new-session",
+        "-d",
+        "-s",
+        "sample",
+        "-n",
+        "x-2",
+        "cat"
+      ])
+
+    {pane, 0} =
+      System.cmd("tmux", [
+        "-L",
+        socket,
+        "split-window",
+        "-d",
+        "-t",
+        "sample:x-2",
+        "-P",
+        "-F",
+        ~S(#{pane_id}),
+        "cat"
+      ])
+
+    pane = String.trim(pane)
+    previous = Application.get_env(:foreman, :planning_tmux_socket)
+    Application.put_env(:foreman, :planning_tmux_socket, socket)
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:foreman, :planning_tmux_socket, previous),
+        else: Application.delete_env(:foreman, :planning_tmux_socket)
+
+      System.cmd("tmux", ["-L", socket, "kill-server"], stderr_to_stdout: true)
+    end)
+
+    assert {:ok, _} =
+             Foreman.Overlay.apply_event({"sample", "x-3"}, {:dispatch, %{window: "main-build"}})
+
+    {:ok, window_build, _} = live(conn, "/?ticket=sample:x-3")
+    refute has_element?(window_build, "#ticket-build-focus")
+
+    assert {:ok, _} = Foreman.Overlay.apply_event({"sample", "x-3"}, {:dispatch, %{window: pane}})
+
+    assert {:ok, _} =
+             Foreman.Overlay.apply_event({"sample", "x-3"}, {:progress, %{body: "Building"}})
+
+    {:ok, view, _} = live(conn, "/?ticket=sample:x-3")
+    assert has_element?(view, "#ticket-build-focus", "Focus")
+    view |> element("#ticket-build-focus") |> render_click()
+
+    assert {selected, 0} =
+             System.cmd("tmux", [
+               "-L",
+               socket,
+               "display-message",
+               "-p",
+               "-t",
+               "sample:",
+               ~S(#{pane_id})
+             ])
+
+    assert String.trim(selected) == pane
+    {:ok, epic, _} = live(conn, "/epics/sample/x-2?ticket=sample:x-3")
+    assert has_element?(epic, "#epic-launch", "Launch")
+    assert has_element?(epic, "#ticket-build-focus", "Focus")
   end
 
   test "session state and copyable attach command are visible", %{conn: conn} do
