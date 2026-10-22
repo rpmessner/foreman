@@ -14,6 +14,7 @@ defmodule ForemanWeb.TicketDetail do
             priority: Foreman.Priority.for_keys([key])[key],
             launchable: Foreman.Sessions.launchable?(Foreman.Sessions.target(key)),
             planning_session: Foreman.Sessions.get(key),
+            build_target: Foreman.Sessions.build_target(key),
             files?:
               Enum.any?(
                 Foreman.RuntimeState.repos(),
@@ -266,6 +267,18 @@ defmodule ForemanWeb.TicketDetail do
           allowed={@ticket.launchable}
           session={@ticket.planning_session}
         />
+        <button
+          :if={@ticket.build_target}
+          id="ticket-build-focus"
+          type="button"
+          phx-click="launch-session"
+          phx-value-action="focus-build"
+          phx-value-project={@ticket.repo}
+          phx-value-ticket={@ticket.id}
+          class="rounded-md border border-base bg-base px-3 py-1.5 text-xs font-medium hover:bg-sunken"
+        >
+          Focus
+        </button>
         <code
           :if={@ticket.close_suggested}
           id="ticket-close-suggestion"

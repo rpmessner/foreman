@@ -54,61 +54,71 @@ defmodule Foreman.SessionsTest do
     %{socket: socket, dir: dir, opts: [socket: socket, executable: "/bin/true"]}
   end
 
-  test "idle timeout keeps the record and closes only its window", c do
-    assert {:ok, session} = Sessions.launch({"sample", "x-1"}, c.opts)
+  for ticket <- ["x-1", "x-2"] do
+    @tag ticket: ticket
+    test "idle timeout keeps #{ticket}'s record and closes only its window", c do
+      assert {:ok, session} = Sessions.launch({"sample", c.ticket}, c.opts)
 
-    System.cmd("tmux", [
-      "-L",
-      c.socket,
-      "set-option",
-      "-w",
-      "-t",
-      session.window,
-      "@foreman-state",
-      "ended"
-    ])
-
-    {other, 0} =
       System.cmd("tmux", [
         "-L",
         c.socket,
-        "new-window",
-        "-d",
+        "set-option",
+        "-w",
         "-t",
-        "sample",
-        "-P",
-        "-F",
-        ~S(#{window_id}),
-        "sleep 60"
+        session.window,
+        "@foreman-state",
+        "ended"
       ])
 
-    assert :ok = Sessions.reconcile(Keyword.put(c.opts, :idle_timeout, 0))
-    parked = Sessions.get({"sample", "x-1"})
-    assert parked.state == :parked
-    assert parked.session_id == session.session_id
+      {other, 0} =
+        System.cmd("tmux", [
+          "-L",
+          c.socket,
+          "new-window",
+          "-d",
+          "-t",
+          "sample",
+          "-P",
+          "-F",
+          ~S(#{window_id}),
+          "sleep 60"
+        ])
 
-    assert {windows, 0} =
-             System.cmd("tmux", ["-L", c.socket, "list-windows", "-a", "-F", ~S(#{window_id})])
+      assert :ok = Sessions.reconcile(Keyword.put(c.opts, :idle_timeout, 0))
+      parked = Sessions.get({"sample", c.ticket})
+      assert parked.state == :parked
+      assert parked.session_id == session.session_id
 
-    assert windows == other
-  end
+      assert {windows, 0} =
+               System.cmd("tmux", ["-L", c.socket, "list-windows", "-a", "-F", ~S(#{window_id})])
 
-  test "relaunch opens a new window with the stored conversation id", c do
-    assert {:ok, session} = Sessions.launch({"sample", "x-1"}, c.opts)
-    System.cmd("tmux", ["-L", c.socket, "kill-window", "-t", session.window])
-    Sessions.reconcile(c.opts)
-    executable = Path.join(c.dir, "resume-probe")
-    File.write!(executable, "#!/bin/sh\nprintf '%s\\n' \"$@\" > resumed-args\n")
-    File.chmod!(executable, 0o700)
+      assert windows == other
+    end
 
-    assert {:ok, resumed} =
-             Sessions.relaunch({"sample", "x-1"}, Keyword.put(c.opts, :executable, executable))
+    @tag ticket: ticket
+    test "relaunch opens #{ticket}'s new window with the stored conversation id", c do
+      assert {:ok, session} = Sessions.launch({"sample", c.ticket}, c.opts)
+      System.cmd("tmux", ["-L", c.socket, "kill-window", "-t", session.window])
+      Sessions.reconcile(c.opts)
+      executable = Path.join(c.dir, "resume-probe")
+      File.write!(executable, "#!/bin/sh\nprintf '%s\\n' \"$@\" > resumed-args\n")
+      File.chmod!(executable, 0o700)
 
-    assert resumed.session_id == session.session_id
-    refute resumed.window == session.window
-    assert eventually(fn -> File.exists?(Path.join(c.dir, "resumed-args")) end)
-    assert ["--resume", id | _] = String.split(File.read!(Path.join(c.dir, "resumed-args")), "\n")
-    assert id == session.session_id
+      assert {:ok, resumed} =
+               Sessions.relaunch(
+                 {"sample", c.ticket},
+                 Keyword.put(c.opts, :executable, executable)
+               )
+
+      assert resumed.session_id == session.session_id
+      refute resumed.window == session.window
+      assert eventually(fn -> File.exists?(Path.join(c.dir, "resumed-args")) end)
+
+      assert ["--resume", id | _] =
+               String.split(File.read!(Path.join(c.dir, "resumed-args")), "\n")
+
+      assert id == session.session_id
+    end
   end
 
   defp eventually(fun, attempts \\ 100)
@@ -226,6 +236,47 @@ defmodule Foreman.SessionsTest do
     assert {"", 0} = System.cmd("tmux", ["-L", c.socket, "list-sessions"])
   end
 
+  test "ticketed epic launches the scoped coordinator in its project window", c do
+    executable = Path.join(c.dir, "claude-probe")
+
+    File.write!(
+      executable,
+      "#!/bin/sh\nprintf '%s\\n' \"$@\" > epic-argv\nprintf '%s\\n' \"$TMUX\" > epic-tmux\nread line\n"
+    )
+
+    File.chmod!(executable, 0o700)
+    opts = Keyword.put(c.opts, :executable, executable)
+    assert {:ok, session} = Sessions.launch({"sample", "x-2"}, opts)
+    assert eventually(fn -> File.exists?(Path.join(c.dir, "epic-tmux")) end)
+    argv = File.read!(Path.join(c.dir, "epic-argv"))
+    assert argv =~ "--session-id\n#{session.session_id}"
+    assert argv =~ "epic coordinator for x-2"
+    assert argv =~ "dispatch"
+    assert argv =~ "pi-window --pane"
+    refute argv =~ "/tight-spec"
+    assert File.read!(Path.join(c.dir, "epic-tmux")) =~ c.socket
+
+    assert {"sample:x-2\n", 0} =
+             System.cmd("tmux", [
+               "-L",
+               c.socket,
+               "list-windows",
+               "-a",
+               "-F",
+               ~S(#{session_name}:#{window_name})
+             ])
+
+    assert {:ok, again} = Sessions.launch({"sample", "x-2"}, opts)
+    assert again.window == session.window
+    File.mkdir_p!("tmp")
+
+    File.write!(
+      "tmp/epic-launch-transcript.txt",
+      "Scratch socket: #{c.socket}\nWindow: sample:x-2 #{session.window}\nStub Claude argv (settings omitted):\n" <>
+        Regex.replace(~r/--settings\n[^\n]*\n/, argv, "--settings\n[per-launch hooks]\n")
+    )
+  end
+
   test "persists launch identity and reuses its window", c do
     assert {:ok, session} = Sessions.launch({"sample", "x-1"}, c.opts)
     assert session.workdir == c.dir
@@ -302,7 +353,7 @@ defmodule Foreman.SessionsTest do
     assert {"", 0} = System.cmd("tmux", ["-L", c.socket, "list-sessions"], stderr_to_stdout: true)
   end
 
-  test "only unplanned tickets and idea/draft epics can launch" do
+  test "unplanned tickets and nonterminal ticketed epics can launch" do
     assert Sessions.launchable?(%{type: "task", status: "open", parent: nil})
     assert Sessions.launchable?(%{type: "decision", status: "open", parent: nil})
     assert Sessions.launchable?(%{type: "chore", status: "open", parent: nil})
@@ -310,9 +361,11 @@ defmodule Foreman.SessionsTest do
     assert Sessions.launchable?(%{type: "feature", status: "open", parent: nil})
     refute Sessions.launchable?(%{type: "task", status: "open", parent: "epic"})
     refute Sessions.launchable?(%{type: "task", status: "closed", parent: nil})
-    for stage <- [:idea, :draft], do: assert(Sessions.launchable?(%{type: "epic", stage: stage}))
 
-    for stage <- [:speccing, :spec_approved, :ticketed, :done, :abandoned],
+    for stage <- [:idea, :draft, :ticketed, :building, :shipping, :shipped],
+        do: assert(Sessions.launchable?(%{type: "epic", stage: stage}))
+
+    for stage <- [:speccing, :spec_approved, :done, :abandoned],
         do: refute(Sessions.launchable?(%{type: "epic", stage: stage}))
 
     refute Sessions.launchable?(nil)

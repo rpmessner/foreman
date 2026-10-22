@@ -93,6 +93,42 @@ defmodule Foreman.SessionTmux do
     end
   end
 
+  def focus_build(project, target, opts \\ []) do
+    with :ok <- Foreman.Preview.allow_external_write(),
+         true <- is_binary(target) and target != "",
+         {:ok, output} <-
+           cmd(
+             [
+               "list-panes",
+               "-a",
+               "-F",
+               ~S(#{session_name}|#{window_name}|#{window_id}|#{pane_id}|#{pane_active})
+             ],
+             opts
+           ),
+         [[^project, _name, window, pane, _active]] <-
+           output
+           |> String.split("\n", trim: true)
+           |> Enum.map(&String.split(&1, "|"))
+           |> Enum.filter(fn
+             [repo, name, window, pane, active] ->
+               repo == project and
+                 if(String.starts_with?(target, "%"),
+                   do: pane == target,
+                   else: target in [name, window] and active == "1"
+                 )
+
+             _ ->
+               false
+           end),
+         {:ok, _} <- cmd(["select-window", "-t", window, ";", "select-pane", "-t", pane], opts) do
+      :ok
+    else
+      {:error, "refused in preview"} = error -> error
+      _ -> {:error, :invalid_window}
+    end
+  end
+
   def external_target(window, opts \\ []) do
     format =
       Enum.join(
@@ -345,7 +381,13 @@ defmodule Foreman.SessionTmux do
            observe(session, opts),
          {:ok, identity} <-
            cmd(
-             ["display-message", "-p", "-t", session.window, ~S(#{@foreman-session} #{pane_id})],
+             [
+               "display-message",
+               "-p",
+               "-t",
+               session.window,
+               ~S(#{@foreman-session} #{?@foreman-pane,#{@foreman-pane},#{?#{==:#{window_panes},1},#{pane_id},}})
+             ],
              opts
            ),
          [id, pane] when id == session.session_id <- String.split(String.trim(identity), " "),
@@ -499,6 +541,7 @@ defmodule Foreman.SessionTmux do
     command =
       scrub <>
         "#{tmux} set-option -w -t \"$TMUX_PANE\" @foreman-session #{quote_arg(s.session_id)}; " <>
+        "#{tmux} set-option -w -t \"$TMUX_PANE\" @foreman-pane \"$TMUX_PANE\"; " <>
         "#{tmux} set-option -w -t \"$TMUX_PANE\" automatic-rename off; " <>
         "#{tmux} set-option -w -t \"$TMUX_PANE\" @foreman-state running; " <>
         Enum.map_join(

@@ -1,0 +1,8 @@
+Compiling 1 file (.ex)
+Generated foreman app
+Running ExUnit with seed: 634050, max_cases: 16
+
+...............................Generated escript foreman with MIX_ENV=test
+..................
+Finished in 22.2 seconds (4.1s async, 18.0s sync)
+49 tests, 0 failures

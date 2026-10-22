@@ -29,6 +29,14 @@ A session that ends its turn by asking in chat ("Shall I commit?") instead of th
 
 The card shows the question, **Open session** and a **Reply** box. Reply types the text (control characters become spaces, at most 2,000 bytes) and then Enter, as two `send-keys` calls. It does this only when the captured screen shows Claude's empty, idle chat input: the `❯` line between two rules at the bottom of the screen, no draft in it, no "esc to interrupt" footer and no spinner line (`✳ Concocting…`) above it. Anything else (a running turn, a draft, a dialog) refuses with "not at its prompt" and keeps Open session. The pane is found the same way as for inline answers (session id and window, or an external pane with the same pid). A reply records the request `answered` (`answered_in_foreman`) and does not store the text. A question the user answers in the pane clears on the next prompt or resume, as before. A later Stop without a question supersedes the card, and a new question replaces it.
 
+## Epic coordinators
+
+Launch a ticketed epic from its board row or epic page. The coordinator runs in the project's main checkout, in a window named by the epic ID. It owns only that epic and uses the dispatch skill's `pi-window --pane` mode. Build panes inherit the coordinator's tmux server and project session; `FOREMAN_SESSION` remains the logical build name.
+
+Building tickets expose Focus in their ticket sheet. Dispatch's `window` field holds the stable `%pane-id`; Focus selects both its containing window and that pane. Ended or parked epic conversations use the existing Relaunch and idle-parking lifecycle. The singleton main coordinator is unchanged.
+
+The launch wrapper records its coordinator pane in the window's `@foreman-pane` option. Continue uses that identity rather than the active pane, which may be a build. Older windows without the option can Continue only when they contain one pane; ambiguous multi-pane windows fail closed.
+
 ## Verification notes
 
 `FOREMAN_HOST_ACCEPTANCE=1 mix test test/foreman/pane_environment_test.exs` checks the real login environment on a clean foreground scratch server. Without that flag, the test uses a fixture shell and tools. Both use stub Claude and a local ticket fixture.

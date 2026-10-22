@@ -167,7 +167,8 @@ defmodule Foreman.Sessions do
 
   defp coordinator_id(_), do: {:ok, nil}
 
-  def launchable?(%{type: "epic", stage: stage}), do: stage in [:idea, :draft]
+  def launchable?(%{type: "epic", stage: stage}),
+    do: stage in [:idea, :draft, :ticketed, :building, :shipping, :shipped]
 
   def launchable?(%{type: type, status: status, parent: nil}) when is_binary(type),
     do: type != "epic" and status not in ["closed", "tombstone"]
@@ -190,6 +191,32 @@ defmodule Foreman.Sessions do
   end
 
   def get({project, ticket}), do: Repo.get_by(PlanningSession, project: project, ticket: ticket)
+
+  def build_target({project, ticket} = key) do
+    case Foreman.Overlay.get(key) do
+      %{stage: stage} when stage in [:dispatched, :building] ->
+        target =
+          Repo.one(
+            from s in "sessions",
+              where: s.repo_key == ^project and s.bead_id == ^ticket and is_nil(s.ended_at),
+              order_by: [desc: s.id],
+              limit: 1,
+              select: s.window
+          )
+
+        if is_binary(target) and Regex.match?(~r/\A%\d+\z/, target), do: target
+
+      _ ->
+        nil
+    end
+  end
+
+  def focus_build({project, _} = key) do
+    case build_target(key) do
+      nil -> {:error, :invalid_window}
+      target -> SessionTmux.focus_build(project, target)
+    end
+  end
 
   def launch({project, ticket} = key, opts \\ []) do
     with :ok <- Foreman.Preview.allow_external_write(),
@@ -486,7 +513,12 @@ defmodule Foreman.Sessions do
             if(target.spec_link, do: " and #{target.spec_link}", else: ""),
         else: "tickets/#{ticket}.md"
 
-    Foreman.SessionPrompt.render(target.type, %{ticket: ticket, project: project, source: source})
+    Foreman.SessionPrompt.render(target.type, %{
+      ticket: ticket,
+      project: project,
+      source: source,
+      stage: Map.get(target, :stage)
+    })
   end
 
   defp main_checkout(path) do

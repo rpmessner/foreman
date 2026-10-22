@@ -1,0 +1,12 @@
+Scratch socket: fm-sessions-1602
+Window: sample:x-2 @0
+Stub Claude argv (settings omitted):
+--session-id
+2a4da1da-5196-4b6f-b2e1-370766b6ee52
+--settings
+[per-launch hooks]
+You are the epic coordinator for x-2 in project sample.
+Read AGENTS.md and tickets/x-2.md. Own only this epic: orient on its ready, in-flight and reported tickets and open requests, not other epics.
+Use the dispatch skill for its ready frontier, in pane mode (pi-window --pane): builds belong in your own window in this project's tmux session, inheriting this tmux server.
+Follow dispatch and foreman for review and close-out; commit only when the user asks, and use board requests for push/PR/merge.
+

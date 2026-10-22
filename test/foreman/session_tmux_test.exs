@@ -75,6 +75,58 @@ defmodule Foreman.SessionTmuxTest do
     assert {_, 0} = System.cmd("tmux", ["-L", c.socket, "has-session", "-t", "=sample"])
   end
 
+  test "build Focus selects the pane as well as its containing window", c do
+    assert {:ok, window} = Tmux.launch(c.session, "flow", c.opts)
+
+    {pane, 0} =
+      System.cmd("tmux", [
+        "-L",
+        c.socket,
+        "split-window",
+        "-d",
+        "-t",
+        window,
+        "-P",
+        "-F",
+        ~S(#{pane_id}),
+        "cat"
+      ])
+
+    pane = String.trim(pane)
+
+    assert {:ok, _} =
+             Tmux.launch(
+               %{c.session | ticket: "x-2", session_id: Ecto.UUID.generate()},
+               "flow",
+               c.opts
+             )
+
+    assert :ok = Tmux.focus_build("sample", pane, c.opts)
+
+    assert {selected, 0} =
+             System.cmd("tmux", [
+               "-L",
+               c.socket,
+               "display-message",
+               "-p",
+               "-t",
+               "sample:",
+               ~S(#{window_id} #{pane_id})
+             ])
+
+    assert String.trim(selected) == "#{window} #{pane}"
+    File.mkdir_p!("tmp")
+
+    File.write!(
+      "tmp/epic-pane-focus-transcript.txt",
+      "Scratch socket: #{c.socket}\nFocus build target: #{pane}\nSelected window and pane: #{String.trim(selected)}\nExpected: #{window} #{pane}\n"
+    )
+
+    assert {:error, :invalid_window} = Tmux.focus_build("other", pane, c.opts)
+    assert {:error, :invalid_window} = Tmux.focus_build("sample", "%99999", c.opts)
+    assert :ok = Tmux.focus_build("sample", "x-1.2", c.opts)
+  end
+
   test "parking refuses attached clients and foreign identities", c do
     assert {:ok, window} = Tmux.launch(c.session, "flow", c.opts)
     session = Map.put(c.session, :window, window)
@@ -134,9 +186,21 @@ defmodule Foreman.SessionTmuxTest do
     assert {:ok, window} = Tmux.launch(c.session, "flow", opts)
     assert eventually(fn -> File.exists?(Path.join(c.dir, "ready")) end)
     refute File.exists?(Path.join(c.dir, "received"))
+
+    {_, 0} =
+      System.cmd("tmux", [
+        "-L",
+        c.socket,
+        "split-window",
+        "-t",
+        window,
+        "sh -c 'read line; printf wrong > #{c.dir}/build-received; cat'"
+      ])
+
     assert :ok = Tmux.continue_session(Map.put(c.session, :window, window), opts)
     assert eventually(fn -> File.exists?(Path.join(c.dir, "received")) end)
     assert File.read!(Path.join(c.dir, "received")) == "continue"
+    refute File.exists?(Path.join(c.dir, "build-received"))
 
     assert {:error, _} =
              Tmux.continue_session(
@@ -145,6 +209,31 @@ defmodule Foreman.SessionTmuxTest do
                |> Map.put(:session_id, Ecto.UUID.generate()),
                opts
              )
+  end
+
+  test "single-pane sessions from before pane tracking can still Continue", c do
+    executable = Path.join(c.dir, "legacy-receiver")
+
+    File.write!(
+      executable,
+      "#!/bin/sh\nprintf ready > ready\nread line\nprintf '%s' \"$line\" > received\nread more\n"
+    )
+
+    File.chmod!(executable, 0o700)
+    opts = Keyword.put(c.opts, :executable, executable)
+    assert {:ok, window} = Tmux.launch(c.session, "flow", opts)
+    assert eventually(fn -> File.exists?(Path.join(c.dir, "ready")) end)
+
+    {_, 0} =
+      System.cmd("tmux", ["-L", c.socket, "set-option", "-wu", "-t", window, "@foreman-pane"])
+
+    assert :ok = Tmux.continue_session(Map.put(c.session, :window, window), opts)
+    assert eventually(fn -> File.exists?(Path.join(c.dir, "received")) end)
+    assert File.read!(Path.join(c.dir, "received")) == "continue"
+    {_, 0} = System.cmd("tmux", ["-L", c.socket, "split-window", "-t", window, "cat"])
+
+    assert {:error, :invalid_window} =
+             Tmux.continue_session(Map.put(c.session, :window, window), opts)
   end
 
   test "coordinator windows resolve exactly on the external socket", c do

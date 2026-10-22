@@ -1,5 +1,5 @@
 defmodule Foreman.SessionPrompt do
-  @moduledoc "Loads skill-owned templates from templates/session-launch. Built-in fallback is enabled only by test configuration."
+  @moduledoc "Renders the epic execution prompt and loads skill-owned planning templates from templates/session-launch. Planning fallback is enabled only by test configuration."
   @workflows %{
     "epic" => "/tight-spec",
     "bug" => "diagnosing-bugs",
@@ -7,7 +7,19 @@ defmodule Foreman.SessionPrompt do
     "task" => "flow"
   }
 
-  def render(kind, context, opts \\ []) do
+  def render(kind, context, opts \\ [])
+
+  def render("epic", %{stage: stage} = context, _opts)
+      when stage in [:ticketed, :building, :shipping, :shipped] do
+    """
+    You are the epic coordinator for #{context.ticket} in project #{context.project}.
+    Read AGENTS.md and #{context.source}. Own only this epic: orient on its ready, in-flight and reported tickets and open requests, not other epics.
+    Use the dispatch skill for its ready frontier, in pane mode (pi-window --pane): builds belong in your own window in this project's tmux session, inheriting this tmux server.
+    Follow dispatch and foreman for review and close-out; commit only when the user asks, and use board requests for push/PR/merge.
+    """
+  end
+
+  def render(kind, context, opts) do
     kind = if Map.has_key?(@workflows, kind), do: kind, else: "task"
     workflow = Map.fetch!(@workflows, kind)
 

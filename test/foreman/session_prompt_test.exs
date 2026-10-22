@@ -23,6 +23,33 @@ defmodule Foreman.SessionPromptTest do
     end
   end
 
+  test "ticketed epic prompt owns only its epic and dispatches panes without planning again" do
+    text =
+      Foreman.SessionPrompt.render(
+        "epic",
+        %{
+          ticket: "x-2",
+          project: "sample",
+          source: "tickets/x-2.md",
+          stage: :ticketed
+        },
+        directory: "/nonexistent",
+        fallback: false
+      )
+
+    assert is_binary(text)
+    assert text =~ "x-2"
+    assert text =~ "tickets/x-2.md"
+    assert text =~ "dispatch"
+    assert text =~ "pi-window --pane"
+    assert text =~ "own window"
+    assert text =~ "ready"
+    assert text =~ "reported"
+    assert text =~ "requests"
+    assert text =~ "only when"
+    refute text =~ "/tight-spec"
+  end
+
   test "missing skill templates are refused outside the test fallback" do
     assert Foreman.SessionPrompt.render(
              "task",
