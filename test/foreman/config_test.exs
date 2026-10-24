@@ -11,6 +11,19 @@ defmodule Foreman.ConfigTest do
     assert error =~ "tickets"
   end
 
+  test "board session is optional and accepts only unambiguous tmux names" do
+    assert {:ok, config} = parse("")
+    refute Map.has_key?(config["board"], "tmux_session")
+
+    assert {:ok, config} = parse("[board]\ntmux_session = \"board-main_2\"")
+    assert config["board"]["tmux_session"] == "board-main_2"
+
+    for value <- ["", "a:b", "a.b", "with space", "@1", "%2", "=board", "a/b", true, 12] do
+      assert {:error, error} = parse("[board]\ntmux_session = #{inspect(value)}")
+      assert error =~ "board.tmux_session"
+    end
+  end
+
   test "shipped views are ordered with Open first" do
     assert {:ok, config} = parse("")
     assert Enum.map(config["views"] || [], & &1["key"]) == ~w(open in-flight stale all)

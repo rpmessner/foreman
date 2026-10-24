@@ -36,7 +36,8 @@ defmodule Foreman.SessionTmux do
              ],
              opts
            ),
-         [^expected, "coordinator", _name, window] <- String.split(String.trim(output), "|") do
+         [^expected, tmux_session, name, window] <- String.split(String.trim(output), "|"),
+         true <- coordinator_location?(tmux_session, name) do
       {:ok, window}
     else
       _ -> {:error, :invalid_coordinator_pane}
@@ -95,6 +96,7 @@ defmodule Foreman.SessionTmux do
 
   def focus_build(project, target, opts \\ []) do
     with :ok <- Foreman.Preview.allow_external_write(),
+         shared = configured_tmux_session(),
          true <- is_binary(target) and target != "",
          {:ok, output} <-
            cmd(
@@ -102,20 +104,22 @@ defmodule Foreman.SessionTmux do
                "list-panes",
                "-a",
                "-F",
-               ~S(#{session_name}|#{window_name}|#{window_id}|#{pane_id}|#{pane_active})
+               ~S(#{session_name}|#{window_name}|#{window_id}|#{pane_id}|#{pane_active}|#{@foreman-project})
              ],
              opts
            ),
-         [[^project, _name, window, pane, _active]] <-
+         [[_session, _name, window, pane, _active, _owner]] <-
            output
            |> String.split("\n", trim: true)
            |> Enum.map(&String.split(&1, "|"))
            |> Enum.filter(fn
-             [repo, name, window, pane, active] ->
-               repo == project and
+             [repo, name, window, pane, active, owner] ->
+               build_location?(repo, project, owner, shared) and
                  if(String.starts_with?(target, "%"),
                    do: pane == target,
-                   else: target in [name, window] and active == "1"
+                   else:
+                     target in [name, window, build_ticket(name, project, shared)] and
+                       active == "1"
                  )
 
              _ ->
@@ -265,11 +269,31 @@ defmodule Foreman.SessionTmux do
   defp session_pane(session, opts) do
     with {:ok, %{window: window}} when window == session.window <- observe(session, opts),
          {:ok, identity} <-
-           cmd(["display-message", "-p", "-t", window, ~S(#{@foreman-session} #{pane_id})], opts),
-         [id, pane] when id == session.session_id <- String.split(String.trim(identity), " ") do
+           cmd(
+             [
+               "display-message",
+               "-p",
+               "-t",
+               window,
+               ~S(#{@foreman-session} #{?@foreman-pane,#{@foreman-pane},#{?#{==:#{window_panes},1},#{pane_id},}})
+             ],
+             opts
+           ),
+         [id, pane] when id == session.session_id <- String.split(String.trim(identity), " "),
+         :ok <- pane_in_window(pane, window, opts) do
       {:ok, pane}
     else
       {:error, :tmux_unavailable} -> {:error, :tmux_unavailable}
+      _ -> {:error, :window_gone}
+    end
+  end
+
+  defp pane_in_window(pane, window, opts) do
+    with true <- Regex.match?(~r/\A%\d+\z/, pane),
+         {:ok, output} <- cmd(["list-panes", "-t", window, "-F", ~S(#{pane_id})], opts),
+         true <- pane in String.split(output, "\n", trim: true) do
+      :ok
+    else
       _ -> {:error, :window_gone}
     end
   end
@@ -391,6 +415,7 @@ defmodule Foreman.SessionTmux do
              opts
            ),
          [id, pane] when id == session.session_id <- String.split(String.trim(identity), " "),
+         :ok <- pane_in_window(pane, window, opts),
          {:ok, _} <-
            cmd(
              ["send-keys", "-t", pane, "-l", "continue", ";", "send-keys", "-t", pane, "Enter"],
@@ -406,9 +431,11 @@ defmodule Foreman.SessionTmux do
     with :ok <- Foreman.Preview.allow_external_write(),
          :ok <- validate(session),
          {:ok, windows} <- windows(opts) do
-      case Enum.find(windows, &matches?(&1, session)) do
+      shared = configured_tmux_session()
+
+      case Enum.find(windows, &matches?(&1, session, shared)) do
         nil ->
-          create(session, prompt, windows, opts)
+          create(session, prompt, windows, opts, shared)
 
         window ->
           with {:ok, _} <- cmd(["select-window", "-t", window.window], opts),
@@ -421,13 +448,15 @@ defmodule Foreman.SessionTmux do
     with :ok <- Foreman.Preview.allow_external_write(),
          :ok <- validate(session),
          {:ok, windows} <- windows(opts) do
-      create(session, nil, windows, Keyword.put(opts, :resume, true))
+      create(session, nil, windows, Keyword.put(opts, :resume, true), configured_tmux_session())
     end
   end
 
   def observe(session, opts \\ []) do
     with {:ok, windows} <- windows(opts) do
-      case Enum.find(windows, &matches?(&1, session)) do
+      shared = configured_tmux_session()
+
+      case Enum.find(windows, &matches?(&1, session, shared)) do
         nil -> {:ok, :window_gone}
         w -> {:ok, %{window: w.window, state: w.state}}
       end
@@ -472,31 +501,49 @@ defmodule Foreman.SessionTmux do
   end
 
   def attach_command(session, opts \\ []) do
-    "tmux -L #{quote_arg(socket(opts))} attach -t #{quote_arg(tmux_project(session) <> ":" <> (Map.get(session, :window) || session.ticket))}"
+    shared = configured_tmux_session()
+
+    "tmux -L #{quote_arg(socket(opts))} attach -t #{quote_arg(tmux_project(session, shared) <> ":" <> (Map.get(session, :window) || window_name(session, shared)))}"
   end
 
-  defp create(s, prompt, windows, opts) do
+  defp create(s, prompt, windows, opts, shared) do
     case System.find_executable(Keyword.get(opts, :executable, "claude")) do
-      nil -> {:error, :claude_unavailable}
-      executable -> open_window(s, prompt, windows, Keyword.put(opts, :executable, executable))
+      nil ->
+        {:error, :claude_unavailable}
+
+      executable ->
+        open_window(s, prompt, windows, Keyword.put(opts, :executable, executable), shared)
     end
   end
 
-  defp open_window(s, prompt, windows, opts) do
+  defp open_window(s, prompt, windows, opts, shared) do
     command = wrapper(s, prompt, opts)
+    project = tmux_project(s, shared)
+    name = window_name(s, shared)
+    new_window = ["new-window", "-t", "=" <> project <> ":", "-n", name]
+    new_session = ["new-session", "-E", "-d", "-s", project, "-n", name]
+    args = if Enum.any?(windows, &(&1.project == project)), do: new_window, else: new_session
+    tail = ["-P", "-F", ~S(#{window_id}), "-c", s.workdir, command]
 
-    args =
-      if Enum.any?(windows, &(&1.project == tmux_project(s))),
-        do: ["new-window", "-t", "=" <> tmux_project(s) <> ":", "-n", s.ticket],
-        else: ["new-session", "-E", "-d", "-s", tmux_project(s), "-n", s.ticket]
+    result =
+      case cmd(args ++ tail, opts) do
+        {:error, {:tmux, output}} = error ->
+          if args == new_session and String.trim(output) == "duplicate session: #{project}",
+            do: cmd(new_window ++ tail, opts),
+            else: error
 
-    with {:ok, output} <-
-           cmd(args ++ ["-P", "-F", ~S(#{window_id}), "-c", s.workdir, command], opts) do
+        result ->
+          result
+      end
+
+    with {:ok, output} <- result do
       window = String.trim(output)
 
       if Regex.match?(~r/\A@\d+\z/, window) do
         with {:ok, _} <-
                cmd(["set-option", "-w", "-t", window, "@foreman-session", s.session_id], opts),
+             {:ok, _} <-
+               cmd(["set-option", "-w", "-t", window, "@foreman-project", s.project], opts),
              do: {:ok, window}
       else
         {:error, :tmux_unavailable}
@@ -603,16 +650,47 @@ defmodule Foreman.SessionTmux do
     end
   end
 
-  defp matches?(window, session) do
+  defp matches?(window, session, shared) do
     target = Map.get(session, :window)
 
-    window.project == tmux_project(session) and
-      if(target, do: window.window == target, else: window.ticket == session.ticket) and
+    window.project == tmux_project(session, shared) and
+      if(target, do: window.window == target, else: window.ticket == window_name(session, shared)) and
       window.identity == session.session_id
   end
 
-  defp tmux_project(s),
-    do: if(Foreman.Sessions.coordinator?(s), do: "coordinator", else: s.project)
+  defp tmux_project(s, shared),
+    do: shared || if(Foreman.Sessions.coordinator?(s), do: "coordinator", else: s.project)
+
+  defp window_name(s, shared) do
+    if shared, do: s.project <> "/" <> s.ticket, else: s.ticket
+  end
+
+  defp coordinator_location?(session, name) do
+    case configured_tmux_session() do
+      nil -> session == "coordinator"
+      shared -> session == shared and name == "__foreman__/coordinator"
+    end
+  end
+
+  defp build_location?(session, project, owner, shared) do
+    case shared do
+      nil -> session == project
+      shared -> session == shared and owner == project
+    end
+  end
+
+  defp build_ticket(name, project, shared) do
+    if shared, do: String.replace_prefix(name, project <> "/", ""), else: name
+  end
+
+  defp configured_tmux_session do
+    case Foreman.RuntimeState.config() do
+      %{config: %{"board" => %{"tmux_session" => name}}} -> name
+      _ -> nil
+    end
+  rescue
+    DBConnection.OwnershipError -> nil
+  end
 
   defp validate(s) do
     if Regex.match?(~r/\A[a-zA-Z0-9_-]+\z/, s.project) and

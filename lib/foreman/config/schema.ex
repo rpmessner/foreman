@@ -9,6 +9,7 @@ defmodule Foreman.Config.Schema do
            "swimlanes" => {:one_of, ~w(project epic none)},
            "stale_session_after" => :duration,
            "terminal_app" => :app,
+           "tmux_session" => :tmux_session,
            "os_notifications" => :boolean
          }},
       "merge_policy" => {:one_of, ~w(board human)},
@@ -159,6 +160,10 @@ defmodule Foreman.Config.Schema do
   defp check(value, :boolean, _) when is_boolean(value), do: :ok
   defp check(value, :text, _) when is_binary(value) and byte_size(value) > 0, do: :ok
   defp check(value, :key, field), do: pattern(value, ~r/\A[a-zA-Z0-9][a-zA-Z0-9._-]*\z/, field)
+
+  defp check(value, :tmux_session, field),
+    do: pattern(value, ~r/\A[a-zA-Z0-9][a-zA-Z0-9_-]*\z/, field)
+
   defp check(value, :github, field), do: pattern(value, ~r/\A[^\/\s]+\/[^\/\s]+\z/, field)
 
   defp check(value, :app, field) do

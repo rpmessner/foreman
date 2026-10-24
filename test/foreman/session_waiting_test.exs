@@ -300,6 +300,9 @@ defmodule Foreman.SessionWaitingTest do
           "display-message" in args ->
             {"#{s.session_id} %7\n", 0}
 
+          "list-panes" in args ->
+            {"%7\n", 0}
+
           "list-clients" in args ->
             {Process.get(:clients, clients), 0}
 
@@ -462,6 +465,7 @@ defmodule Foreman.SessionWaitingTest do
       cond do
         "list-windows" in args -> {"sample\ts-1\t@42\trunning\t0\t#{s.session_id}\n", 0}
         "display-message" in args -> {"#{s.session_id} %7\n", 0}
+        "list-panes" in args -> {"%7\n", 0}
         "capture-pane" in args -> {"✻ Worked for 2s\n#{rule}\n❯ \n#{rule}\n  footer\n", 0}
         true -> {"", 0}
       end
