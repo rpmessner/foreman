@@ -61,19 +61,35 @@ defmodule Foreman.CLI do
     # propagate a linked exit into the agent-facing escript.
     Process.flag(:trap_exit, true)
     # Do not boot Foreman.Application: an agent must not become a web/worker node.
-    Application.ensure_all_started(:req)
-    Application.ensure_all_started(:postgrex)
+    unless List.first(args) == "child-environment" do
+      Application.ensure_all_started(:req)
+      Application.ensure_all_started(:postgrex)
+    end
+
     Logger.configure(level: :emergency)
     System.halt(run(args))
   end
 
   def run(args, opts \\ []) do
     cond do
-      List.first(args) == "coordinator" -> Foreman.CoordinatorCLI.run(tl(args), opts)
-      List.first(args) == "session-hook" -> session_hook(tl(args), opts)
-      List.first(args) == "adopt" -> Foreman.AdoptCLI.run(tl(args), opts)
-      Foreman.TicketCLI.command?(args, opts) -> Foreman.TicketCLI.run(args, opts)
-      true -> run_overlay(List.delete(args, "--overlay"), opts)
+      List.first(args) == "child-environment" ->
+        IO.puts(Foreman.ChildEnvironment.command(System.get_env(), tl(args)))
+        0
+
+      List.first(args) == "coordinator" ->
+        Foreman.CoordinatorCLI.run(tl(args), opts)
+
+      List.first(args) == "session-hook" ->
+        session_hook(tl(args), opts)
+
+      List.first(args) == "adopt" ->
+        Foreman.AdoptCLI.run(tl(args), opts)
+
+      Foreman.TicketCLI.command?(args, opts) ->
+        Foreman.TicketCLI.run(args, opts)
+
+      true ->
+        run_overlay(List.delete(args, "--overlay"), opts)
     end
   rescue
     _ -> warn(args, "foreman unavailable; agent may continue")

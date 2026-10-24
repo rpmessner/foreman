@@ -2,6 +2,18 @@ defmodule Foreman.CLITest do
   use ExUnit.Case, async: true
   alias Foreman.CLI
 
+  test "child-environment emits an executable clean command without a board request" do
+    output =
+      ExUnit.CaptureIO.capture_io(fn ->
+        assert CLI.run(["child-environment", "/usr/bin/printenv", "FOREMAN_DATABASE_URL"]) == 0
+      end)
+
+    assert String.starts_with?(output, "exec /usr/bin/env -i ")
+
+    assert {"", 1} =
+             System.cmd("/bin/sh", ["-c", output], env: [{"FOREMAN_DATABASE_URL", "test-only"}])
+  end
+
   test "ticket verbs encode their claims with actor/session defaults" do
     for {verb, event} <- [
           {"dispatch", "dispatch"},

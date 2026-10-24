@@ -489,16 +489,9 @@ defmodule Foreman.SessionTmux do
         do: args ++ ["/orient"],
         else: args
 
-    # Match a normal tmux window's interactive login startup, then remove service
-    # settings even if a local shell startup file reintroduces them.
-    scrub =
-      "for name in $(env | cut -d= -f1); do " <>
-        "case \"$name\" in RELEASE_*|PHX_*|FOREMAN_DATABASE_URL|SECRET_KEY_BASE) unset \"$name\";; esac; done; "
-
     # All variable text becomes a single shell argument, including multiline prompts.
     command =
-      scrub <>
-        "#{tmux} set-option -w -t \"$TMUX_PANE\" @foreman-session #{quote_arg(s.session_id)}; " <>
+      "#{tmux} set-option -w -t \"$TMUX_PANE\" @foreman-session #{quote_arg(s.session_id)}; " <>
         "#{tmux} set-option -w -t \"$TMUX_PANE\" automatic-rename off; " <>
         "#{tmux} set-option -w -t \"$TMUX_PANE\" @foreman-state running; " <>
         Enum.map_join(
@@ -508,7 +501,23 @@ defmodule Foreman.SessionTmux do
         ) <>
         "; #{tmux} set-option -w -t \"$TMUX_PANE\" @foreman-state ended; exec \"$SHELL\" -l"
 
-    "exec \"$SHELL\" -ilc " <> quote_arg(command)
+    # Read the login environment at execution time, then replace it using the
+    # same pure builder for fresh, resumed and respawned sessions. Use an
+    # absolute CLI path: PATH may still name the release's foreman script here.
+    helper =
+      case Keyword.get(
+             opts,
+             :environment_executable,
+             Application.get_env(:foreman, :session_environment_executable)
+           ) do
+        nil -> [Path.join([System.user_home!(), ".local", "bin", "foreman"])]
+        executable -> [executable]
+      end
+
+    clean =
+      Enum.map_join(helper ++ ["child-environment", "/bin/sh", "-c", command], " ", &quote_arg/1)
+
+    "exec \"$SHELL\" -ilc " <> quote_arg("clean=$(#{clean}) && eval \"$clean\"")
   end
 
   defp windows(opts) do
