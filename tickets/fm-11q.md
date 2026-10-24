@@ -2,7 +2,7 @@
 id: fm-11q
 title: "Ticket sheet: rename 'Beads fields', human time for created at"
 type: bug
-status: in_progress
+status: closed
 priority: 3
 parent: null
 blocked_by: []
@@ -11,8 +11,8 @@ supersedes: []
 discovered_from: null
 labels: []
 created: 2026-10-21
-closed: null
-close_reason: null
+closed: 2026-10-24
+close_reason: "Sheet shows Ticket fields with created at 'Oct 21'; live on release 20261024T191409 (deployed 2026-10-24 with mix foreman.deploy; smoke passed)."
 ---
 
 The ticket sheet's Overview still has a 'BEADS FIELDS' heading (tickets are files now) and shows created at as a raw ISO string (2026-10-20T10:00:00Z), against the house rule that times use the shared human format with the full time on hover. Seen in fm-c2w.30's screenshots.

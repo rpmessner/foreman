@@ -25,3 +25,6 @@ When a request becomes answered and no live wait holds it (the asking session is
 - [ ] Needs you shows not-picked-up answers with ticket, session and answer; LiveView test
 - [ ] A notification fires once per such answer
 - [ ] Reproduce fm-zgd.7's shape end to end: ask, wait times out, session reports, answer arrives; the mark and notification appear
+
+## Notes
+- 2026-10-24 user: Deployed in live on release 20261024T191409 (deployed 2026-10-24 with mix foreman.deploy; smoke passed). Live not-picked-up check still open: needs a real answer arriving after its wait ended (next build question).

@@ -2,7 +2,7 @@
 id: fm-c2w.33
 title: "Port: parked ticket status with a required reason"
 type: feature
-status: in_progress
+status: closed
 priority: 3
 parent: fm-c2w
 blocked_by: ["fm-c2w.31"]
@@ -11,8 +11,8 @@ supersedes: []
 discovered_from: null
 labels: []
 created: 2026-10-21
-closed: null
-close_reason: null
+closed: 2026-10-24
+close_reason: "On hold section and count live; live on release 20261024T191409 (deployed 2026-10-24 with mix foreman.deploy; smoke passed)."
 ---
 
 ## What to build
