@@ -24,3 +24,4 @@ Two concurrent mix test runs in sibling worktrees collided on a shared temporary
 ## Notes
 - 2026-10-21 user: 2026-10-21: initiatives_live_test.exs failed 2 of 7 runs in the fm-parked worktree with no code change between runs (TMPDIR isolated), so the flake is not only shared temp dirs; include the LiveView signing/clock failure in this ticket's scope.
 - 2026-10-22 user: Flake seen 2026-10-22 on merged main: initiatives_live_test.exs:280 ('2 d ago' age) failed once in the full suite, passed alone and on full rerun.
+- 2026-10-24 user: More load flakes 2026-10-24: request_pickup_test.exs:175 (live wait expires at deadline) failed once in a full run, passed 3x alone and on full rerun; one unidentified failure in a precommit run on merged main after fm-cleanenv. Raise priority if this keeps costing reruns.

@@ -2,7 +2,7 @@
 id: fm-c2w.32
 title: "Port: board.tmux_session puts launched sessions in one tmux session"
 type: feature
-status: in_progress
+status: closed
 priority: 3
 parent: fm-c2w
 blocked_by: []
@@ -11,8 +11,8 @@ supersedes: []
 discovered_from: null
 labels: []
 created: 2026-10-21
-closed: null
-close_reason: null
+closed: 2026-10-24
+close_reason: "board.tmux_session merged (a3b4757); 839 tests green; scratch tmux transcripts for both modes. Live check after deploy."
 ---
 
 ## What to build
