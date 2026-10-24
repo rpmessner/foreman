@@ -528,12 +528,13 @@ defmodule ForemanWeb.TicketDetail do
   attr :repo, :string, required: true
 
   attr :ticket, :map, default: nil
+  attr :class, :string, default: "border-b border-base py-3"
 
   def history_row(assigns) do
     assigns = assign(assigns, :payload, history_payload(assigns.event))
 
     ~H"""
-    <article id={@id} data-outcome={@event.outcome} class="border-b border-base py-3 text-xs">
+    <article id={@id} data-outcome={@event.outcome} class={["min-w-0 text-xs", @class]}>
       <div class="flex flex-wrap items-center gap-2">
         <span class="font-mono font-medium">{@event.event}</span>
         <span>{@event.from_stage || "—"} → {@event.to_stage}</span>
@@ -544,13 +545,13 @@ defmodule ForemanWeb.TicketDetail do
       <div class="mt-1 text-foreground-softer">
         {@event.actor} · <.timestamp at={@event.inserted_at} />
       </div>
-      <dl :if={@payload != []} class="mt-2 grid grid-cols-[90px_minmax(0,1fr)] gap-2">
-        <%= for {key, value} <- @payload do %>
-          <dt class="text-foreground-softer">{key}</dt>
-          <dd class="fm-markdown break-words">
+      <dl :if={@payload != []} class="fm-history-facts mt-2 space-y-1">
+        <div :for={{key, value} <- @payload} class="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3">
+          <dt class="text-foreground-softer leading-5 break-words">{key}</dt>
+          <dd class="fm-markdown">
             {Phoenix.HTML.raw(Foreman.TicketDocuments.render(value, @ticket || @repo))}
           </dd>
-        <% end %>
+        </div>
       </dl>
     </article>
     """

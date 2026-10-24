@@ -66,6 +66,7 @@ a.bb-nav-active { background: light-dark(#e4e4e7, #3f3f46); color: var(--foregro
 button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 
 .fm-markdown { min-width: 0; max-width: 100%; font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
+.fm-history-facts .fm-markdown { font-size: 12px; line-height: 20px; }
 .fm-markdown > :first-child { margin-top: 0; }
 .fm-markdown > :last-child { margin-bottom: 0; }
 .fm-markdown h1, .fm-markdown h2, .fm-markdown h3, .fm-markdown h4 { font-weight: 650; line-height: 1.35; margin: 1.8em 0 .7em; letter-spacing: -.015em; }
