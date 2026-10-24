@@ -2,7 +2,7 @@
 id: fm-c2w.32
 title: "Port: board.tmux_session puts launched sessions in one tmux session"
 type: feature
-status: open
+status: in_progress
 priority: 3
 parent: fm-c2w
 blocked_by: []

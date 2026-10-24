@@ -9,7 +9,7 @@ Run `foreman coordinator` in the coordinator pane on the board's tmux server. Th
 
 Stop the running coordinator before replacing or adopting its conversation. The board's Focus control selects its window; Relaunch resumes it; Start fresh requires confirmation.
 
-The service replaces only the requesting pane, after checking its socket and its `coordinator` tmux session. Claude runs in `~/dev/music`, with `/orient` as the only prompt and the existing per-launch hooks. The service PATH must contain `claude`. No global Claude settings change.
+The service replaces only the requesting pane, after checking its socket and coordinator location. Claude runs in `~/dev/music`, with `/orient` as the only prompt and the existing per-launch hooks. The service PATH must contain `claude`. No global Claude settings change.
 
 Pane startup uses the tmux server/session environment, not the web service's client environment. The wrapper starts `$SHELL` as an interactive login shell, removes service settings before Claude, and returns to `$SHELL` when Claude exits. Per-launch hooks carry their URL and token explicitly and resolve `foreman` on the pane PATH. Coordinator respawns disable automatic renaming before replacing the pane, preserving the layout's window name.
 
@@ -31,11 +31,28 @@ The card shows the question, **Open session** and a **Reply** box. Reply types t
 
 ## Epic coordinators
 
-Launch a ticketed epic from its board row or epic page. The coordinator runs in the project's main checkout, in a window named by the epic ID. It owns only that epic and uses the dispatch skill's `pi-window --pane` mode. Build panes inherit the coordinator's tmux server and project session; `FOREMAN_SESSION` remains the logical build name.
+Launch a ticketed epic from its board row or epic page. The coordinator runs in the project's main checkout, in a window named by the epic ID (prefixed with `project/` in shared-session mode). It owns only that epic and uses the dispatch skill's `pi-window --pane` mode. Build panes inherit the coordinator's tmux server and containing session; `FOREMAN_SESSION` remains the logical build name.
 
-Building tickets expose Focus in their ticket sheet. Dispatch's `window` field holds the stable `%pane-id`; Focus selects both its containing window and that pane. Ended or parked epic conversations use the existing Relaunch and idle-parking lifecycle. The singleton main coordinator is unchanged.
+Building tickets expose Focus in their ticket sheet. Dispatch's `window` field holds the stable `%pane-id`; Focus selects both its containing window and that pane. Ended or parked epic conversations use the existing Relaunch and idle-parking lifecycle. The singleton main coordinator keeps its separate conversation.
 
 The launch wrapper records its coordinator pane in the window's `@foreman-pane` option. Continue uses that identity rather than the active pane, which may be a build. Older windows without the option can Continue only when they contain one pane; ambiguous multi-pane windows fail closed.
+
+## Board tmux session
+
+Set `tmux_session` under `[board]` in foreman.toml to put board launches in one session on the board's tmux server:
+
+```toml
+[board]
+tmux_session = "board"
+```
+
+The name starts with a letter or digit and contains only letters, digits, underscores and hyphens. Empty names, dots and colons are rejected.
+
+With this setting, planning and epic coordinator windows use `project/ticket` names, including draft IDs such as `music/draft:arrangement`. The singleton uses `__foreman__/coordinator`. Project keys cannot contain slashes, so equal ticket IDs in different projects have different window names. Relaunch can leave an older window with the same name; recorded window IDs and conversation markers distinguish them.
+
+Without the setting, project windows keep their ticket names inside project-named sessions; the singleton stays in `coordinator`. Changing the setting does not move existing windows. Park or end those conversations before switching layouts.
+
+Shared-session build Focus checks the window's `@foreman-project` marker before selecting a pane. Input targets must belong to the identified conversation's window. Waiting controls use `@foreman-pane`, not a build pane that happens to be active. Single-pane windows without a pane marker remain usable; ambiguous windows refuse input.
 
 ## Verification notes
 

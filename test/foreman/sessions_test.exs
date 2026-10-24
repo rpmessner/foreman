@@ -277,6 +277,109 @@ defmodule Foreman.SessionsTest do
     )
   end
 
+  test "board launches planning, epic and singleton windows in the configured session", c do
+    import Ecto.Query
+    row = Foreman.RuntimeState.config()
+    config = put_in(row.config, ["board", "tmux_session"], "board")
+    Foreman.Repo.update_all(from(b in "board_config", where: b.id == 1), set: [config: config])
+
+    for ticket <- ["x-1", "x-2"] do
+      assert {:ok, session} = Sessions.launch({"sample", ticket}, c.opts)
+      assert {:ok, again} = Sessions.launch({"sample", ticket}, c.opts)
+      assert again.window == session.window
+    end
+
+    opts = Keyword.put(c.opts, :workdir, c.dir)
+    assert {:ok, coordinator} = Sessions.launch_coordinator(:resume, opts)
+
+    assert {"board|__foreman__/coordinator\n", 0} ==
+             System.cmd("tmux", [
+               "-L",
+               c.socket,
+               "display-message",
+               "-p",
+               "-t",
+               coordinator.window,
+               ~S(#{session_name}|#{window_name})
+             ])
+
+    assert eventually(fn ->
+             Sessions.reconcile(c.opts)
+             Sessions.coordinator().state == :ended
+           end)
+
+    assert {:ok, resumed} = Sessions.launch_coordinator(:resume, opts)
+    assert resumed.session_id == coordinator.session_id
+    refute resumed.window == coordinator.window
+
+    assert {"board|__foreman__/coordinator\n", 0} ==
+             System.cmd("tmux", [
+               "-L",
+               c.socket,
+               "display-message",
+               "-p",
+               "-t",
+               resumed.window,
+               ~S(#{session_name}|#{window_name})
+             ])
+  end
+
+  test "shared board session recovers and relaunches each planning or epic conversation", c do
+    import Ecto.Query
+    row = Foreman.RuntimeState.config()
+    config = put_in(row.config, ["board", "tmux_session"], "board")
+    Foreman.Repo.update_all(from(b in "board_config", where: b.id == 1), set: [config: config])
+
+    for ticket <- ["x-1", "x-2"] do
+      reserved =
+        Foreman.Repo.insert!(%Foreman.PlanningSession{
+          project: "sample",
+          ticket: ticket,
+          state: :starting,
+          workdir: c.dir,
+          launched_at: DateTime.utc_now()
+        })
+
+      assert {:ok, window} = Foreman.SessionTmux.launch(reserved, "flow", c.opts)
+      assert {:ok, session} = Sessions.launch({"sample", ticket}, c.opts)
+      assert session.window == window
+      assert session.session_id == reserved.session_id
+      assert {:ok, again} = Sessions.launch({"sample", ticket}, c.opts)
+      assert again.window == window
+
+      assert {"board|sample/#{ticket}\n", 0} ==
+               System.cmd("tmux", [
+                 "-L",
+                 c.socket,
+                 "display-message",
+                 "-p",
+                 "-t",
+                 window,
+                 ~S(#{session_name}|#{window_name})
+               ])
+
+      assert eventually(fn ->
+               Sessions.reconcile(c.opts)
+               Sessions.get({"sample", ticket}).state == :ended
+             end)
+
+      assert {:ok, resumed} = Sessions.relaunch({"sample", ticket}, c.opts)
+      assert resumed.session_id == reserved.session_id
+      refute resumed.window == window
+
+      assert {"board|sample/#{ticket}\n", 0} ==
+               System.cmd("tmux", [
+                 "-L",
+                 c.socket,
+                 "display-message",
+                 "-p",
+                 "-t",
+                 resumed.window,
+                 ~S(#{session_name}|#{window_name})
+               ])
+    end
+  end
+
   test "persists launch identity and reuses its window", c do
     assert {:ok, session} = Sessions.launch({"sample", "x-1"}, c.opts)
     assert session.workdir == c.dir
