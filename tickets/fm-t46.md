@@ -2,7 +2,7 @@
 id: fm-t46
 title: "Launched sessions start with a clean environment, not the release's"
 type: bug
-status: in_progress
+status: closed
 priority: 1
 parent: null
 blocked_by: []
@@ -11,8 +11,8 @@ supersedes: []
 discovered_from: null
 labels: []
 created: 2026-10-21
-closed: null
-close_reason: null
+closed: 2026-10-24
+close_reason: "Clean child environment for launched sessions merged (b59a7be, merge 198b2da); 833 tests green on main. Operator step: remove the shell-global service export (documented in deploy/systemd/README.md). Live check after deploy. Deploy ordering follow-up: fm-77p."
 ---
 
 ## What to build
