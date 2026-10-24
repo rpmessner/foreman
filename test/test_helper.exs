@@ -6,6 +6,19 @@ config_dir =
 File.mkdir_p!(config_dir)
 System.put_env("FOREMAN_CONFIG_DIR", config_dir)
 
+environment_executable = Path.join(config_dir, "foreman-env")
+elixir = System.find_executable("elixir")
+erlang_bin = Path.dirname(System.find_executable("erl"))
+ebin = Path.dirname(:code.which(Foreman.CLI) |> to_string())
+
+File.write!(environment_executable, """
+#!/bin/sh
+PATH='#{erlang_bin}':"$PATH" exec '#{elixir}' --erl '+S 2:2' -pa '#{ebin}' -e 'Foreman.CLI.main(System.argv())' -- "$@"
+""")
+
+File.chmod!(environment_executable, 0o700)
+Application.put_env(:foreman, :session_environment_executable, environment_executable)
+
 Mimic.copy(Phoenix.Token)
 Mimic.copy(File)
 

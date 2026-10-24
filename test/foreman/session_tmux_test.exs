@@ -282,7 +282,7 @@ defmodule Foreman.SessionTmuxTest do
 
     File.write!(
       shell,
-      "#!/bin/sh\nif [ \"$1\" = -ilc ]; then\nexport RELEASE_LOGIN_ONLY=test PHX_LOGIN_ONLY=test\nexec /bin/sh -c \"$2\"\nfi\n"
+      "#!/bin/sh\nif [ \"$1\" = -ilc ]; then\nexport RELEASE_LOGIN_ONLY=test PHX_LOGIN_ONLY=test FOREMAN_DATABASE_URL=test SECRET_KEY_BASE=test ERTS_LIB_DIR=test\nexport PATH=/test/release/erts-16/bin:/test/release/bin:$PATH\nexec /bin/sh -c \"$2\"\nfi\n"
     )
 
     File.chmod!(shell, 0o700)
@@ -290,16 +290,35 @@ defmodule Foreman.SessionTmuxTest do
 
     File.write!(
       executable,
-      "#!/bin/sh\nprintf '%s:%s' \"${RELEASE_LOGIN_ONLY-unset}\" \"${PHX_LOGIN_ONLY-unset}\" > '#{c.dir}/login-env'\n"
+      "#!/bin/sh\nprintf '%s:%s:%s:%s:%s' \"${RELEASE_LOGIN_ONLY-unset}\" \"${PHX_LOGIN_ONLY-unset}\" \"${FOREMAN_DATABASE_URL-unset}\" \"${SECRET_KEY_BASE-unset}\" \"${ERTS_LIB_DIR-unset}\" > '#{c.dir}/login-env'\nprintf '%s' \"$PATH\" > '#{c.dir}/login-path'\n"
     )
 
     File.chmod!(executable, 0o700)
 
-    {:ok, command} =
-      Tmux.coordinator_wrapper(c.session, :fresh, Keyword.put(c.opts, :executable, executable))
+    for mode <- [:fresh, :resume] do
+      {:ok, command} =
+        Tmux.coordinator_wrapper(c.session, mode, Keyword.put(c.opts, :executable, executable))
 
-    System.cmd("/bin/sh", ["-c", command], env: [{"SHELL", shell}], stderr_to_stdout: true)
-    assert File.read!(Path.join(c.dir, "login-env")) == "unset:unset"
+      System.cmd("/bin/sh", ["-c", command], env: [{"SHELL", shell}], stderr_to_stdout: true)
+      assert File.read!(Path.join(c.dir, "login-env")) == "unset:unset:unset:unset:unset"
+      refute File.read!(Path.join(c.dir, "login-path")) =~ "/test/release"
+      assert File.read!(Path.join(c.dir, "login-path")) =~ "/usr/bin"
+    end
+  end
+
+  test "a failed environment helper never starts the agent", c do
+    {:ok, command} =
+      Tmux.coordinator_wrapper(
+        c.session,
+        :fresh,
+        Keyword.put(c.opts, :environment_executable, "/bin/false")
+      )
+
+    {_, status} =
+      System.cmd("/bin/sh", ["-c", command], env: [{"SHELL", "/bin/sh"}], stderr_to_stdout: true)
+
+    assert status != 0
+    refute File.exists?(Path.join(c.dir, "args"))
   end
 
   test "coordinator tmux failure returns a serializable refusal", c do
