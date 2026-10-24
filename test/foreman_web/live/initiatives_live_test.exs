@@ -635,6 +635,39 @@ defmodule ForemanWeb.InitiativesLiveTest do
     assert has_element?(view, "[data-band=fallout] [data-stage=dispatched]")
   end
 
+  test "epic history keeps ordered label/value pairs inside their own event", %{conn: conn} do
+    Foreman.Overlay.apply_event(
+      {"sample", "e"},
+      {:dispatch,
+       %{
+         title: "A long epic title that must stay beside its own label",
+         window: "history-builder",
+         spec_link: "docs/spec.md",
+         beads_epic_id: "e"
+       }},
+      %{actor: "builder"}
+    )
+
+    {:ok, view, _} = live(conn, "/epics/sample/e")
+    event = "#epic-history > article:has(dt)"
+    assert has_element?(view, event <> " > div:first-child", "dispatch")
+    assert has_element?(view, event <> " time[title][datetime]")
+
+    for {index, label, value} <- [
+          {1, "Title", "A long epic title that must stay beside its own label"},
+          {2, "Session", "history-builder"},
+          {3, "Spec", "docs/spec.md"},
+          {4, "Epic", "e"}
+        ] do
+      pair = event <> " > dl > div:nth-child(#{index})"
+      assert has_element?(view, pair <> " > dt:first-child", label)
+      assert has_element?(view, pair <> " > dt + dd:last-child", value)
+    end
+
+    assert has_element?(view, event <> " dd a[href='/documents/sample?path=docs%2Fspec.md']")
+    refute has_element?(view, "#epic-history > article:not(:has(dt)) dl")
+  end
+
   test "epic title navigation carries filters and missing routes stay usable", %{conn: conn} do
     {:ok, view, _} = live(conn, "/?project=sample&type=bug")
     view |> element("[data-bead=e] a") |> render_click()

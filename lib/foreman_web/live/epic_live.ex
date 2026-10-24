@@ -136,12 +136,13 @@ defmodule ForemanWeb.EpicLive do
           <ForemanWeb.PlanningSession.status id="epic" session={@planning_session} />
           <section>
             <h2 class="bb-label mb-3">Epic stage history</h2>
-            <div id="epic-history" phx-update="stream" class="flex flex-wrap gap-4">
+            <div id="epic-history" phx-update="stream" class="grid grid-cols-1 gap-2">
               <ForemanWeb.TicketDetail.history_row
                 :for={{id, event} <- @streams.epic_history}
                 id={id}
                 event={event}
                 repo={elem(@epic_key, 0)}
+                class="rounded-lg border border-base p-3"
               />
             </div>
           </section>

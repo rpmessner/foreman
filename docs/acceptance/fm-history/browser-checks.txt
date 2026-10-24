@@ -1,0 +1,5 @@
+PASS 1440 light: 5 equal-width cards, 9 aligned pairs, no history overflow
+PASS 1440 dark: 5 equal-width cards, 9 aligned pairs, no history overflow
+PASS 390 light: 5 equal-width cards, 9 aligned pairs, no history overflow
+PASS shared ticket history: 5 document links retained
+PASS 390 dark: 5 equal-width cards, 9 aligned pairs, no history overflow

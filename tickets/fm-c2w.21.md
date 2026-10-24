@@ -2,7 +2,7 @@
 id: fm-c2w.21
 title: "Epic page: stage history facts render as scattered, misaligned key/value blocks"
 type: bug
-status: open
+status: in_progress
 priority: 2
 parent: fm-c2w
 blocked_by: []
